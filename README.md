@@ -88,6 +88,11 @@ These rules apply to every exercise folder:
 - **Device portability.** Training scripts auto-select CUDA → MPS (Apple
   Silicon) → CPU, so the same code runs on a laptop, a workstation, or a
   cluster unchanged.
+- **Commit attribution.** Changes made by the AI agent (OnIt) are committed
+  under the repo-local identity `OnIt <onit@localhost>` with a
+  `Co-authored-by: OnIt <onit@localhost>` trailer, so `git log` clearly
+  distinguishes human commits from agent commits. The local config also sets
+  `commit.gpgsign=false` for the agent's commits.
 
 ---
 
