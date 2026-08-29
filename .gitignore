@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+my_venv/
+venv/
+.env/
+
+# Data caches (auto-downloaded by torchvision)
+me1/data/
+
+# macOS
+.DS_Store
