@@ -1,0 +1,137 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    parameters {
+        string(name: 'VERSION', defaultValue: '', description: 'Artifact version; blank uses the Jenkins build number.')
+        string(name: 'MANIFEST', defaultValue: '', description: 'Optional repository-relative .jsonl or .csv manifest.')
+        string(name: 'EPOCHS', defaultValue: '10', description: 'Training epochs, 1-1000.')
+        string(name: 'BATCH_SIZE', defaultValue: '32', description: 'Training batch size, 1-256.')
+        choice(name: 'DEVICE', choices: ['auto', 'cpu', 'cuda', 'mps'], description: 'Training device on daniel-pc.')
+        booleanParam(name: 'TRAIN_REMOTE', defaultValue: true, description: 'Train on daniel-pc.')
+        booleanParam(name: 'DEPLOY_PI', defaultValue: false, description: 'Deploy the fetched checkpoint to the Raspberry Pi.')
+    }
+
+    environment {
+        REMOTE_HOST = 'daniel-pc.tailfa8657.ts.net'
+        REMOTE_USER = 'jdrne'
+        REMOTE_PLATFORM = 'windows'
+        REMOTE_PYTHON = 'python'
+        PI_HOST = '192.168.68.52'
+        PI_USER = 'jdrnepomuceno9'
+        PI_ROOT = 'TrainingGround'
+        REMOTE_ROOT = 'TrainingGround'
+        PYTHON_BIN = 'python3'
+        KNOWN_HOSTS_FILE = "${WORKSPACE}/.jenkins-known-hosts"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate and package') {
+            steps {
+                script {
+                    env.PIPELINE_VERSION = params.VERSION?.trim()
+                    if (!env.PIPELINE_VERSION) {
+                        env.PIPELINE_VERSION = "vjenkins-${env.BUILD_NUMBER}"
+                    }
+                }
+                sh '''#!/bin/bash
+                    set -euo pipefail
+                    VERSION="$PIPELINE_VERSION" ./me2/pipeline.sh compile
+                    VERSION="$PIPELINE_VERSION" ./me2/pipeline.sh package
+                '''
+            }
+        }
+
+        stage('Train on daniel-pc') {
+            when {
+                expression { params.TRAIN_REMOTE }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'pi5vcm-rig-ssh-key', variable: 'RIG_SSH_KEY'),
+                    file(credentialsId: 'pi5vcm-known-hosts', variable: 'PINNED_KNOWN_HOSTS')
+                ]) {
+                    sh '''#!/bin/bash
+                        set -euo pipefail
+                        VERSION="$PIPELINE_VERSION" \
+                        MANIFEST="$MANIFEST" \
+                        EPOCHS="$EPOCHS" \
+                        BATCH_SIZE="$BATCH_SIZE" \
+                        DEVICE="$DEVICE" \
+                        SSH_KEY="$RIG_SSH_KEY" \
+                        KNOWN_HOSTS_FILE="$PINNED_KNOWN_HOSTS" \
+                        ./me2/pipeline.sh train-remote
+                    '''
+                }
+            }
+        }
+
+        stage('Fetch checkpoint') {
+            when {
+                expression { params.TRAIN_REMOTE }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'pi5vcm-rig-ssh-key', variable: 'RIG_SSH_KEY'),
+                    file(credentialsId: 'pi5vcm-known-hosts', variable: 'PINNED_KNOWN_HOSTS')
+                ]) {
+                    sh '''#!/bin/bash
+                        set -euo pipefail
+                        VERSION="$PIPELINE_VERSION" \
+                        SSH_KEY="$RIG_SSH_KEY" \
+                        KNOWN_HOSTS_FILE="$PINNED_KNOWN_HOSTS" \
+                        ./me2/pipeline.sh fetch
+                    '''
+                }
+                archiveArtifacts artifacts: 'artifacts/**', fingerprint: true
+            }
+        }
+
+        stage('Approve Pi deployment') {
+            when {
+                expression { params.DEPLOY_PI && params.TRAIN_REMOTE }
+            }
+            steps {
+                input message: "Deploy ${env.PIPELINE_VERSION} to Raspberry Pi?", ok: 'Deploy'
+            }
+        }
+
+        stage('Deploy to Raspberry Pi') {
+            when {
+                expression { params.DEPLOY_PI && params.TRAIN_REMOTE }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'pi5vcm-pi-ssh-key', variable: 'PI_KEY'),
+                    file(credentialsId: 'pi5vcm-known-hosts', variable: 'PINNED_KNOWN_HOSTS')
+                ]) {
+                    sh '''#!/bin/bash
+                        set -euo pipefail
+                        VERSION="$PIPELINE_VERSION" \
+                        PI_SSH_KEY="$PI_KEY" \
+                        KNOWN_HOSTS_FILE="$PINNED_KNOWN_HOSTS" \
+                        ./me2/pipeline.sh deploy-pi
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'rm -f .jenkins-known-hosts'
+            deleteDir()
+        }
+    }
+}
