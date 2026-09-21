@@ -1,0 +1,6 @@
+# Recording-session dependencies (audio capture only -- no torch needed).
+# Install into the project venv:
+#   ~/MyPlayground/Pi5-VCM/pi5venv/bin/pip install -r recording/requirements.txt
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24

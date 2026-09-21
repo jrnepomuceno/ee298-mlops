@@ -14,9 +14,40 @@ import torchaudio
 import config
 
 
+def _load_wav_fallback(path: str) -> tuple[torch.Tensor, int]:
+    """Load a wav without torchaudio's torchcodec backend.
+
+    Newer torchaudio routes ``torchaudio.load`` through ``torchcodec``; when
+    that package is absent, fall back to ``soundfile`` (a project dep) and
+    then the stdlib ``wave`` module. Returns ``(wav [channels, samples]
+    float32, sr)`` in the same shape ``torchaudio.load`` gives.
+    """
+    try:
+        import soundfile as sf
+        data, sr = sf.read(path, dtype="float32", always_2d=True)
+        return torch.from_numpy(data.T), int(sr)
+    except Exception:
+        import wave
+        with wave.open(path, "rb") as w:
+            sr, ch, sw, n = (w.getframerate(), w.getnchannels(),
+                             w.getsampwidth(), w.getnframes())
+            raw = w.readframes(n)
+        if sw == 2:
+            data = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        elif sw == 1:
+            data = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
+                    - 128.0) / 128.0
+        else:
+            raise ValueError(f"unsupported sample width {sw}")
+        return torch.from_numpy(data.reshape(-1, ch).T), int(sr)
+
+
 def load_wav_mono(path, sample_rate: int = config.SAMPLE_RATE) -> torch.Tensor:
     """Load a wav file as a float32 mono tensor at `sample_rate`."""
-    wav, sr = torchaudio.load(str(path))
+    try:
+        wav, sr = torchaudio.load(str(path))
+    except (ImportError, RuntimeError, OSError):
+        wav, sr = _load_wav_fallback(str(path))
     if wav.shape[0] > 1:
         wav = wav.mean(dim=0, keepdim=True)
     if sr != sample_rate:
