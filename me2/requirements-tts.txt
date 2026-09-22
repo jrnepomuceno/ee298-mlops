@@ -1,0 +1,2 @@
+# Optional offline speech output.
+piper-tts>=1.2

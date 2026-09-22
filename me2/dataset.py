@@ -16,6 +16,7 @@ import csv
 import json
 import random
 import re
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -179,7 +180,42 @@ def split_samples(samples: list[dict],
                   val_frac: float = 0.1,
                   seed: int = 0
                   ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Stratified-ish split: shuffle once, then slice by fraction."""
+    """Split samples into (train, val, test).
+
+    If every sample carries a non-empty ``split`` field with a value in
+    ``{train, val, test}`` (the real dataset's manifest provides one),
+    those labels are respected verbatim -- no reshuffling across splits,
+    so the dataset's intended partition (speaker/phrase disjointness) is
+    preserved and there is no cross-split leakage.
+
+    Otherwise (e.g. synthetic manifests, which have no split column) this
+    falls back to the legacy behaviour: shuffle once, slice by fraction.
+    A warning is emitted in that case, since a random split can place
+    same-speaker / same-phrase variants on both sides of the boundary.
+    """
+    splits = {str(s.get("split", "")).strip().lower() for s in samples}
+    if splits and splits <= {"train", "val", "test"}:
+        out: dict[str, list[dict]] = {"train": [], "val": [], "test": []}
+        for s in samples:
+            out[str(s["split"]).strip().lower()].append(s)
+        rng = random.Random(seed)
+        for key in out:  # shuffle within each split only
+            rng.shuffle(out[key])
+        empty = [k for k, v in out.items() if not v]
+        if empty:
+            warnings.warn(
+                f"split_samples: manifest 'split' column present but "
+                f"split(s) {empty} contain no samples",
+                stacklevel=2,
+            )
+        return out["train"], out["val"], out["test"]
+
+    if samples:
+        warnings.warn(
+            "split_samples: no usable 'split' column in manifest; "
+            "falling back to a random 80/10/10 split (leakage risk)",
+            stacklevel=2,
+        )
     rng = random.Random(seed)
     shuffled = samples[:]
     rng.shuffle(shuffled)

@@ -1,0 +1,2 @@
+# Optional pretrained wake-word support for `--wakeword alexa`.
+openwakeword>=0.6
