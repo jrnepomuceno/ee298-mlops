@@ -43,9 +43,9 @@ cd me2
 source ../pi5venv/bin/activate
 
 python main.py generate                      # synthetic manifest -> data/
-python main.py train --epochs 10             # train (synthetic by default)
-python main.py train --manifest data/real_manifest.jsonl   # real data
-python main.py test                          # evaluate best.pt on test split
+python main.py train --epochs 10             # train on the configured VCM manifest
+python main.py train --manifest data/real_manifest.jsonl   # alternate manifest
+python main.py test                          # evaluate pi5-vcm-best.pt on test split
 python main.py demo                          # run sample utterances
 ```
 
@@ -119,14 +119,14 @@ VERSION=v0.1.0 MANIFEST=data/real_manifest.jsonl \
   REMOTE_PYTHON=python EPOCHS=30 ./pipeline.sh all
 ```
 
-The fetched `best.pt` is the deployment artifact. Keep the matching
+The fetched `pi5-vcm-best.pt` is the training artifact. Keep the matching
 `config.py`, `model.py`, and `utils/` files with it on the Raspberry Pi, or
 install the dependencies listed in `requirements-runtime.txt` and run the
 existing `main.py test`/`demo` commands there.
 
 ### Deploy the trained checkpoint to the Pi
 
-The Pi deployment copies `best.pt`, `history.json`, the runtime source, and
+The Pi deployment copies `pi5-vcm-best.pt`, `pi5-vcm-history.json`, the runtime source, and
 `requirements-runtime.txt` to `~/TrainingGround/<version>/` on
 `192.168.68.52`. It uses `jdrnepomuceno9@192.168.68.52` and the normal SSH
 identity by default:
@@ -148,8 +148,8 @@ On the Pi, install the runtime dependencies and evaluate the deployed model:
 ```bash
 cd ~/TrainingGround/v0.1.0
 python3 -m pip install -r requirements-runtime.txt
-python3 main.py test --ckpt best.pt
-python3 main.py demo --ckpt best.pt
+python3 main.py test --ckpt pi5-vcm-best.pt
+python3 main.py demo --ckpt pi5-vcm-best.pt
 ```
 
 Real-data manifest format (CSV or JSONL), one row per utterance:
@@ -167,4 +167,4 @@ data/wav/0001.wav,dim_lights,dim the lights to 40 percent,alice
   a pipeline check, not a quality measure.
 - CPU-only on the Pi; `--device auto` picks cuda/mps when available.
 - Keep `--num-workers 0` on the Pi (2 GB RAM).
-- Checkpoints land in `checkpoints/` (`best.pt`, `last.pt`, `history.json`).
+- Checkpoints land in `checkpoints/` (`pi5-vcm-best.pt`, `pi5-vcm-last.pt`, `pi5-vcm-history.json`).

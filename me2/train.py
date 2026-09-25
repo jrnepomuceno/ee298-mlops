@@ -22,7 +22,8 @@ def train_one_epoch(model: VCM,
                     optimizer: torch.optim.Optimizer,
                     device: torch.device,
                     ctc_loss: nn.CTCLoss,
-                    grad_clip: float = 5.0) -> dict:
+                    grad_clip: float = 5.0,
+                    amp: bool = False) -> dict:
     model.train()
     total = 0.0
     ce_sum = 0.0
@@ -30,6 +31,9 @@ def train_one_epoch(model: VCM,
     correct = 0
     n = 0
     t0 = time.time()
+    # bf16 autocast for the forward+loss only; backward/step run in fp32
+    # (bf16 needs no GradScaler). Enabled only on cuda.
+    amp_enabled = bool(amp) and device.type == "cuda"
 
     for mels, intents, _transcripts, ctc_targets, ctc_lengths in loader:
         mels = mels.to(device)
@@ -38,19 +42,21 @@ def train_one_epoch(model: VCM,
         ctc_lengths = ctc_lengths.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        intent_logits, ctc_logits = model(mels)
+        with torch.autocast("cuda", dtype=torch.bfloat16,
+                            enabled=amp_enabled):
+            intent_logits, ctc_logits = model(mels)
 
-        # intent term
-        ce = nn.functional.cross_entropy(intent_logits, intents)
+            # intent term
+            ce = nn.functional.cross_entropy(intent_logits, intents)
 
-        # ctc term: input must be log-probs, (T, B, V)
-        log_probs = nn.functional.log_softmax(ctc_logits, dim=-1).permute(1, 0, 2)
-        input_lengths = torch.full((ctc_lengths.size(0),),
-                                   ctc_logits.size(1),
-                                   dtype=torch.long, device=device)
-        ctc = ctc_loss(log_probs, ctc_targets, input_lengths, ctc_lengths)
+            # ctc term: input must be log-probs, (T, B, V)
+            log_probs = nn.functional.log_softmax(ctc_logits, dim=-1).permute(1, 0, 2)
+            input_lengths = torch.full((ctc_lengths.size(0),),
+                                       ctc_logits.size(1),
+                                       dtype=torch.long, device=device)
+            ctc = ctc_loss(log_probs, ctc_targets, input_lengths, ctc_lengths)
 
-        loss = config.CE_WEIGHT * ce + config.CTC_WEIGHT * ctc
+            loss = config.CE_WEIGHT * ce + config.CTC_WEIGHT * ctc
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()

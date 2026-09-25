@@ -3,7 +3,7 @@
 **Date:** 2026-09-22
 **Target:** Raspberry Pi 5 at `192.168.68.52`
 **Pi user:** `jdrnepomuceno9`
-**Pi runtime:** `~/pi5-vcm`
+**Pi runtime:** `~/MyProjects/pi5-vcm`
 
 ## Current Architecture
 
@@ -56,14 +56,14 @@ Verified on the Pi:
 - PyTorch and torchaudio installed in `~/piper-venv`.
 - WILLEN is PipeWire sink 97.
 - DuoCast capture device is named `HyperX DuoCast` and currently accepts 44.1 kHz.
-- Static replies deployed to `~/pi5-vcm/assets/replies/`.
+- Static replies deployed to `~/MyProjects/pi5-vcm/assets/replies/`.
 
 ## Pi Commands
 
 From a Pi shell:
 
 ```bash
-cd ~/pi5-vcm
+cd ~/MyProjects/pi5-vcm
 
 # Production combined harness
 ~/piper-venv/bin/python -m rpi5.run \

@@ -17,6 +17,7 @@ import json
 import random
 import re
 import warnings
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -128,6 +129,17 @@ def load_manifest(path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+
+def manifest_fingerprint(samples: list[dict]) -> str:
+    """Hash manifest content while ignoring machine-specific audio paths."""
+    rows = []
+    for sample in samples:
+        fields = {key: value for key, value in sample.items() if key != "path"}
+        rows.append(json.dumps(fields, sort_keys=True, separators=(",", ":")))
+    payload = "\n".join(sorted(rows)).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 class VCMDataset(Dataset):
     """Yields (mel, intent_id, transcript) for one utterance.
 
@@ -138,16 +150,57 @@ class VCMDataset(Dataset):
 
     def __init__(self, samples: list[dict],
                  max_frames: int | None = None,
-                 augment: bool = False):
+                 augment: bool = False,
+                 mels_dir: str | Path | None = None,
+                 split: str | None = None,
+                 manifest_seed: int = 42,
+                 mels_fingerprint: str | None = None):
         self.samples = samples
         self.max_frames = max_frames
         self.augment = augment
         self._cache: dict[tuple, torch.Tensor] = {}
+        self._mels = None
+        self._mels_path: Path | None = None
+        if mels_dir is not None:
+            if split not in {"train", "val", "test"}:
+                raise ValueError("split must be train, val, or test with mels_dir")
+            if any("path" not in sample for sample in samples):
+                raise ValueError("precomputed mels require real samples with paths")
+            mels_path = Path(mels_dir) / f"mels_{split}.npy"
+            sidecar_path = mels_path.with_suffix(".json")
+            if not mels_path.exists() or not sidecar_path.exists():
+                raise FileNotFoundError(f"missing precomputed mel files for {split}")
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            expected_fingerprint = mels_fingerprint or manifest_fingerprint(samples)
+            if (metadata.get("seed") != manifest_seed or
+                    metadata.get("manifest_fingerprint") != expected_fingerprint or
+                    metadata.get("n_rows") != len(samples)):
+                raise ValueError(f"precomputed mels metadata mismatch for {split}")
+            shape = np.load(mels_path, mmap_mode="r", allow_pickle=False).shape
+            if shape[0] != len(samples):
+                raise ValueError(f"precomputed mel row mismatch for {split}")
+            self._mels_path = mels_path
 
     def __len__(self) -> int:
         return len(self.samples)
 
-    def _mel(self, sample: dict) -> torch.Tensor:
+    def _mel(self, sample: dict, idx: int | None = None) -> torch.Tensor:
+        if self._mels is not None:
+            if idx is None:
+                raise ValueError("precomputed mel lookup requires an index")
+            mel = torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
+            if self.augment:
+                mel = audio_utils.spec_augment(mel)
+            return mel
+        if self._mels_path is not None:
+            # Open inside each DataLoader worker; Windows spawn cannot pickle
+            # an mmap handle created in the parent process.
+            self._mels = np.load(self._mels_path, mmap_mode="r", allow_pickle=False)
+            mel = torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
+            if self.augment:
+                mel = audio_utils.spec_augment(mel)
+            return mel
         if "path" in sample:
             wav = audio_utils.load_wav_mono(sample["path"])
             mel = audio_utils.mel_spectrogram(wav)
@@ -168,7 +221,7 @@ class VCMDataset(Dataset):
 
     def __getitem__(self, idx: int):
         sample = self.samples[idx]
-        mel = self._mel(sample)
+        mel = self._mel(sample, idx)
         intent_id = config.INTENT_TO_ID.get(sample["intent"],
                                             config.INTENT_TO_ID[config.OOV_INTENT])
         transcript = sample.get("transcript") or " ".join(sample["words"])

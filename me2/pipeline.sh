@@ -14,12 +14,12 @@ VERSION="${VERSION:-v${RUN_ID}}"
 PI_HOST="${PI_HOST:-192.168.68.52}"
 PI_USER="${PI_USER:-jdrnepomuceno9}"
 PI_SSH_KEY="${PI_SSH_KEY:-}"
-PI_ROOT="${PI_ROOT:-TrainingGround}"
+PI_ROOT="${PI_ROOT:-~/MyProjects/pi5-vcm}"
 KNOWN_HOSTS_FILE="${KNOWN_HOSTS_FILE:-${HOME}/.ssh/pi5vcm_known_hosts}"
 DIST_DIR="${ROOT_DIR}/dist"
 BUNDLE="${DIST_DIR}/pi5-vcm-${VERSION}.tar.gz"
 REMOTE_RUN="${REMOTE_ROOT}/${VERSION}"
-PI_RUN="${PI_ROOT}/${VERSION}"
+PI_RUN="${PI_RUN:-${PI_ROOT}}"
 
 SSH_OPTS=(-i "${SSH_KEY}" -o IdentitiesOnly=yes -o BatchMode=yes
     -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}"
@@ -51,7 +51,7 @@ validate_inputs() {
     validate_version
     [[ "${REMOTE_ROOT}" =~ ^[A-Za-z0-9._-]+$ ]] || \
         die "REMOTE_ROOT contains unsafe characters"
-    [[ "${PI_ROOT}" =~ ^[A-Za-z0-9._-]+$ ]] || \
+    [[ "${PI_ROOT}" =~ ^[A-Za-z0-9._/~:-]+$ ]] || \
         die "PI_ROOT contains unsafe characters"
     [[ "${REMOTE_PLATFORM}" == windows || "${REMOTE_PLATFORM}" == unix ]] || \
         die "REMOTE_PLATFORM must be windows or unix"
@@ -174,29 +174,36 @@ fetch() {
     validate_inputs
     mkdir -p "${ROOT_DIR}/artifacts/${VERSION}"
     scp "${SCP_OPTS[@]}" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_RUN}/checkpoints/best.pt" \
-        "${ROOT_DIR}/artifacts/${VERSION}/best.pt"
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_RUN}/checkpoints/pi5-vcm-best.pt" \
+        "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-best.pt"
     scp "${SCP_OPTS[@]}" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_RUN}/checkpoints/history.json" \
-        "${ROOT_DIR}/artifacts/${VERSION}/history.json"
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_RUN}/checkpoints/pi5-vcm-history.json" \
+        "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-history.json"
     cp "${ROOT_DIR}/requirements-runtime.txt" "${ROOT_DIR}/artifacts/${VERSION}/"
-    sha256_file "${ROOT_DIR}/artifacts/${VERSION}/best.pt" \
-        > "${ROOT_DIR}/artifacts/${VERSION}/best.pt.sha256"
-    sha256_file "${ROOT_DIR}/artifacts/${VERSION}/history.json" \
-        > "${ROOT_DIR}/artifacts/${VERSION}/history.json.sha256"
+    sha256_file "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-best.pt" \
+        > "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-best.pt.sha256"
+    sha256_file "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-history.json" \
+        > "${ROOT_DIR}/artifacts/${VERSION}/pi5-vcm-history.json.sha256"
     printf '[fetch] artifacts/%s\n' "${VERSION}"
 }
 
 deploy_pi() {
     validate_inputs
     local artifact_dir="${ROOT_DIR}/artifacts/${VERSION}"
-    [[ -f "${artifact_dir}/best.pt" ]] || fetch
+    [[ -f "${artifact_dir}/pi5-vcm-best.pt" ]] || fetch
+    local backup_tag
+    backup_tag="$(date -u +%Y-%m-%d)"
 
     ssh "${PI_SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
-        "mkdir -p '${PI_RUN}/utils'"
+        "mkdir -p ${PI_RUN}/utils ${PI_RUN}/inference"
+    ssh "${PI_SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
+        "set -e; if [ -f ${PI_RUN}/inference/best.pt ]; then cp ${PI_RUN}/inference/best.pt ${PI_RUN}/inference/${backup_tag}_best.pt.old; fi"
     scp "${PI_SCP_OPTS[@]}" \
-        "${artifact_dir}/best.pt" "${artifact_dir}/history.json" \
-        "${artifact_dir}/best.pt.sha256" "${artifact_dir}/history.json.sha256" \
+        "${artifact_dir}/pi5-vcm-best.pt" \
+        "${PI_USER}@${PI_HOST}:${PI_RUN}/inference/best.pt"
+    scp "${PI_SCP_OPTS[@]}" \
+        "${artifact_dir}/pi5-vcm-history.json" \
+        "${artifact_dir}/pi5-vcm-best.pt.sha256" "${artifact_dir}/pi5-vcm-history.json.sha256" \
         "${ROOT_DIR}/requirements-runtime.txt" \
         "${PI_USER}@${PI_HOST}:${PI_RUN}/"
     scp "${PI_SCP_OPTS[@]}" \
@@ -205,7 +212,7 @@ deploy_pi() {
     scp "${PI_SCP_OPTS[@]}" "${ROOT_DIR}"/utils/*.py \
         "${PI_USER}@${PI_HOST}:${PI_RUN}/utils/"
     ssh "${PI_SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
-        "cd '${PI_RUN}' && sha256sum -c best.pt.sha256 && sha256sum -c history.json.sha256"
+        "cd '${PI_RUN}' && sha256sum -c pi5-vcm-best.pt.sha256 && sha256sum -c pi5-vcm-history.json.sha256"
     printf '[deploy-pi] %s:%s\n' "${PI_HOST}" "${PI_RUN}"
 }
 

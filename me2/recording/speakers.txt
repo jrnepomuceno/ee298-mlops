@@ -1,0 +1,20 @@
+# Speaker registry — Pi5-VCM recording sessions
+#
+# Format (one speaker per line):
+#   <uuid>  <name>  <date>  <notes>
+#
+# Rules:
+#   - The UUID is the --speaker id passed to record.py. It appears in both
+#     the file paths (data/<uuid>/...) and the manifest, so it is the ONLY
+#     link between an audio clip and the person who said it.
+#   - Same person recording again later? Reuse their UUID so their clips
+#     are grouped as one speaker.
+#   - New person? Generate a fresh one:  uuidgen | tr 'A-Z' 'a-z'
+#   - Keep this file in sync as you add speakers.
+
+ae326b81-8d30-45ec-bff5-77886d044c3d  speaker-1  2026-09-21  first session (joven)
+0a969896-606e-4e70-8e82-40b5114e7aa1  speaker-2  2026-09-21  reserved
+90bc6afa-1087-4da2-973b-0fbd5039797c  speaker-3  2026-09-21  reserved
+a706bd2c-273d-498c-813d-205dbbad0aaa  speaker-4  2026-09-21  reserved
+b7444c7d-15c0-4f82-b1b4-831207fc8cae  speaker-5  2026-09-21  reserved
+6b9b3020-0add-43ff-b4fa-d2fc3e49632c  speaker-6  2026-09-21  reserved

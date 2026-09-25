@@ -87,6 +87,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wake-only", action="store_true",
                         help="test standby -> wake word -> acknowledgement only")
     parser.add_argument("--no-warmup", action="store_true")
+    parser.add_argument("--warmup-color", default="FFA500",
+                        help="RGB color for the warmup pulse "
+                             "(default: FFA500 orange; try 00FF00 green)")
     return parser.parse_args()
 
 
@@ -107,9 +110,13 @@ def main() -> int:
     args = parse_args()
     configure_logging()
     sys.excepthook = log_uncaught_exception
+    rgb = RgbController(args.rgb_executable)
+    warming = not args.no_warmup
     try:
         if args.microphone or args.vcm_only:
             print_microphone_intro(args)
+        if warming:
+            rgb.warming(args.warmup_color)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,
@@ -117,6 +124,8 @@ def main() -> int:
             min_confidence=args.min_confidence,
             warmup=0 if args.no_warmup else 1,
         ))
+        if warming:
+            rgb.idle()
         if args.microphone or args.vcm_only:
             log("Valid intents: " + ", ".join(harness.intents))
         if args.input:
@@ -138,7 +147,6 @@ def main() -> int:
                                               args.wakeword_threshold,
                                               on_score=log_score)
                         if args.wakeword else None)
-            rgb = RgbController(args.rgb_executable)
             wav_player = WavPlayer(args.audio_player, args.audio_device)
             vad_config = VADConfig(capture_device=args.input_device)
             current_event: dict[str, object] = {}
@@ -209,7 +217,6 @@ def main() -> int:
                             rgb.wake()
                             log("[vcm] ready; speak now")
             finally:
-                rgb.close()
                 if log_file is not None:
                     log_file.close()
             events = []
@@ -219,6 +226,8 @@ def main() -> int:
     except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
         log(f"error: {exc}", error=True)
         return 2
+    finally:
+        rgb.close()
 
     for event in events:
         print(event_json(event))

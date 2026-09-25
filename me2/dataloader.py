@@ -51,17 +51,23 @@ def make_dataloader(dataset: VCMDataset,
                     batch_size: int = 32,
                     shuffle: bool = False,
                     num_workers: int = 0,
-                    pin_memory: bool = False) -> DataLoader:
+                    pin_memory: bool = False,
+                    persistent_workers: bool | None = None) -> DataLoader:
     """DataLoader with the VCM collate function.
 
-    num_workers: keep 0 on the Pi (RAM); 2-4 is fine on a dev machine.
+    num_workers: keep 0 on the Pi (RAM); 4-8 is fine on a dev machine.
+    persistent_workers: default True when num_workers > 0 (avoids respawning
+        workers every epoch); forced False when num_workers == 0.
     """
+    if persistent_workers is None:
+        persistent_workers = num_workers > 0
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
         collate_fn=collate_fn,
         drop_last=False,
     )

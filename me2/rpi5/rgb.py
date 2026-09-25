@@ -30,6 +30,10 @@ class RgbController:
     def wake(self) -> dict[str, Any]:
         return self.animate("00A0FF", "listening", speed=10)
 
+    def warming(self, color: str = "FFA500", speed: int = 8) -> dict[str, Any]:
+        """Fast breathing (pulse) while the checkpoint loads and warms."""
+        return self.animate(color, "warming", speed=speed, mode="pulse")
+
     def processing(self) -> dict[str, Any]:
         return self.solid("FF8C00", "processing")
 
@@ -58,12 +62,13 @@ class RgbController:
         )
         return {"status": "applied", "state": state, "command": command}
 
-    def animate(self, color: str, state: str, speed: int) -> dict[str, Any]:
+    def animate(self, color: str, state: str, speed: int,
+                mode: str = "wave") -> dict[str, Any]:
         self._stop_cycle()
         self._stop_quadcast_process()
         if not self.enabled:
             return {"status": "dry_run", "state": state, "command": None}
-        command = [self.executable, "-s", str(speed), "wave", color]
+        command = [self.executable, "-s", str(speed), mode, color]
         self._cycle = subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )

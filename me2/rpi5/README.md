@@ -45,9 +45,9 @@ The actual harness microphone path also uses static intent WAVs. Run it with
 `--reply-dir assets/replies`; it selects `<intent>.wav` after inference and
 never starts Piper for command replies.
 
-Fixed intent replies are cataloged in `reply_catalog.py` and can be generated
-as `assets/replies/<intent>.wav` for fully offline playback. These fixed files
-confirm the action but do not include variable slot values.
+Fixed intent replies are the pre-recorded WAVs in `assets/replies/<intent>.wav`,
+played back fully offline. These fixed files confirm the action but do not
+include variable slot values; slot-aware reply text is built by `replies.py`.
 
 Wake-word support is optional and uses a pretrained `openwakeword` model.
 Install `requirements-wakeword.txt` before using `--wakeword alexa`. The exact
