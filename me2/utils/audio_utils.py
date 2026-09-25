@@ -115,6 +115,25 @@ def add_noise(wav: torch.Tensor, snr_db: float,
     return wav + noise * noise_power.sqrt()
 
 
+def spec_noise(mel: torch.Tensor,
+               snr_db: float,
+               rng: np.random.Generator) -> torch.Tensor:
+    """Add white Gaussian noise to a log-mel at a target SNR (dB).
+
+    Mel-domain SNR augmentation: works for both the wav-loading path and
+    the precomputed-mels training path (which never sees the waveform).
+    Power is computed on the log-mel values; the noise std is scaled so
+    the noise power is ``10 ** (-snr_db / 10)`` of the signal power.
+    Returns a copy.
+    """
+    out = mel.clone()
+    power = out.pow(2).mean().clamp_min(1e-10)
+    noise_power = power / (10.0 ** (snr_db / 10.0))
+    noise = torch.from_numpy(
+        rng.standard_normal(out.shape).astype(np.float32))
+    return out + noise * noise_power.sqrt()
+
+
 # ------------------------------------------------------- toy speech synthesis --
 
 def _word_frequencies(word: str, speaker: str) -> tuple[float, float, float]:

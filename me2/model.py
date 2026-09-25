@@ -74,20 +74,41 @@ class VCM(nn.Module):
             nn.Linear(hidden_size, ctc_vocab_size),
         )
 
-    def _pool(self, x: torch.Tensor) -> torch.Tensor:
-        """x: (B, T, H). Returns (B, H) via mean over time (ignores padding
-        implicitly -- padded frames are zero and contribute little)."""
-        return x.mean(dim=1)
+    def _pool(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+        """x: (B, T, H). Returns (B, H) via mean over time.
 
-    def forward(self, mels: torch.Tensor):
-        """mels: (B, T, n_mels). Returns (intent_logits, ctc_logits)."""
+        When ``lengths`` (B,) true frame counts are given, the mean is
+        length-aware: zero-padded frames are masked out instead of
+        diluting the pooled vector. Without lengths, falls back to a plain
+        mean (pre-padding behavior).
+        """
+        if lengths is None:
+            return x.mean(dim=1)
+        t = x.size(1)
+        mask = torch.arange(t, device=x.device).unsqueeze(0) < lengths.unsqueeze(1)
+        mask = mask.unsqueeze(-1).to(x.dtype)                    # (B, T, 1)
+        denom = mask.sum(dim=1).clamp_min(1.0)                   # (B, 1)
+        return (x * mask).sum(dim=1) / denom
+
+    def forward(self, mels: torch.Tensor,
+                lengths: torch.Tensor | None = None):
+        """mels: (B, T, n_mels); lengths: (B,) true mel-frame counts.
+
+        Returns (intent_logits, ctc_logits). When ``lengths`` is given the
+        intent pool masks padding and the caller can use it for CTC
+        ``input_lengths`` (true length, not padded).
+        """
         x = mels.unsqueeze(1)                     # (B, 1, T, F)
         x = self.conv(x)                          # (B, C, T/4, F)
         b, c, t, f = x.shape
         x = x.permute(0, 2, 1, 3).reshape(b, t, c * f)
         x = self.gru_in(x)                        # (B, T/4, hidden_size)
         x, _ = self.gru(x)                        # (B, T/4, 2H)
-        intent_logits = self.intent_head(self._pool(x))   # (B, num_intents)
+        pooled_lengths = None
+        if lengths is not None:
+            # conv downsamples time by 4 (two stride-2 pools)
+            pooled_lengths = torch.clamp(lengths // 4, min=1)
+        intent_logits = self.intent_head(self._pool(x, pooled_lengths))  # (B, num_intents)
         ctc_logits = self.slot_head(x)            # (B, T/4, ctc_vocab)
         return intent_logits, ctc_logits
 
@@ -131,6 +152,10 @@ def parse_slots(intent: str, transcript: str) -> dict:
 
     slots: dict = {}
     t = transcript.lower()
+    # The CTC vocab has one token per digit, so "18" decodes as "1 8".
+    # Re-join space-separated digit tokens before the (\d+) regexes run,
+    # otherwise multi-digit values truncate to their first digit (18 -> 8).
+    t = re.sub(r"(?<=\d) (?=\d)", "", t)
 
     m = re.search(r"(\d+)\s*percent", t)
     if m:

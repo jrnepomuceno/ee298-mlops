@@ -15,14 +15,20 @@ from dataset import load_manifest, manifest_fingerprint, split_samples
 from utils.audio_utils import load_wav_mono, mel_spectrogram, pad_or_trim
 
 
-def _compute(sample: dict) -> np.ndarray:
+MAX_FRAMES = 400
+
+
+def _compute(sample: dict) -> tuple[np.ndarray, int]:
+    """(padded mel, true pre-padding frame count) for one sample."""
     if "path" not in sample:
         raise ValueError("precomputed mels require real samples with paths")
     path = Path(sample["path"])
     if not path.exists():
         raise FileNotFoundError(path)
-    mel = pad_or_trim(mel_spectrogram(load_wav_mono(str(path))), 400)
-    return mel.numpy().astype(np.float32, copy=False)
+    mel = mel_spectrogram(load_wav_mono(str(path)))
+    true_len = min(int(mel.shape[0]), MAX_FRAMES)
+    return (pad_or_trim(mel, MAX_FRAMES).numpy().astype(np.float32, copy=False),
+            true_len)
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,22 +61,27 @@ def main() -> None:
                 continue
         started = time.perf_counter()
         rows = []
+        lengths = []
         with Pool(processes=args.workers) as pool:
-            for index, row in enumerate(pool.imap(_compute, split_samples_list), 1):
+            for index, (row, true_len) in enumerate(pool.imap(_compute, split_samples_list), 1):
                 rows.append(row)
+                lengths.append(true_len)
                 if index % 1000 == 0:
                     print(f"[{split_name}] {index}/{len(split_samples_list)}", flush=True)
         array = np.ascontiguousarray(np.stack(rows))
         if args.dtype == "float16":
             array = array.astype(np.float16)
         np.save(npy_path, array)
+        lengths_path = npy_path.with_name(f"mels_{split_name}_lengths.npy")
+        np.save(lengths_path, np.asarray(lengths, dtype=np.int64))
         metadata = {
             "seed": args.seed,
             "manifest_fingerprint": fingerprint,
             "n_rows": len(split_samples_list),
-            "max_frames": 400,
+            "max_frames": MAX_FRAMES,
             "n_mels": 80,
             "dtype": str(array.dtype),
+            "lengths_file": lengths_path.name,
         }
         with open(sidecar_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)

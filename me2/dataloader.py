@@ -23,8 +23,11 @@ def collate_fn(batch):
     transcripts : list[str]
     ctc_targets : (sum of token lengths,) int64  -- flattened, no blanks
     ctc_lengths : (B,) int64 -- number of tokens per sample
+    mels_lengths: (B,) int64 -- TRUE mel-frame count per sample (pre-padding).
+        Feeds the length-aware intent pool and the CTC ``input_lengths``
+        (CTC frame count is derived as ``mels_lengths // 4``).
     """
-    mels, intents, transcripts = zip(*batch)
+    mels, intents, transcripts, lengths = zip(*batch)
 
     t_max = max(m.shape[0] for m in mels)
     n_mels = mels[0].shape[1]
@@ -39,12 +42,16 @@ def collate_fn(batch):
         dtype=torch.long)
     ctc_lengths = torch.tensor([len(toks) for toks in token_lists],
                                dtype=torch.long)
+    # True lengths come from the dataset (sidecar for precomputed mels),
+    # not from the padded tensor width.
+    mels_lengths = torch.tensor(lengths, dtype=torch.long)
 
     return (padded,
             torch.tensor(intents, dtype=torch.long),
             transcripts,
             ctc_targets,
-            ctc_lengths)
+            ctc_lengths,
+            mels_lengths)
 
 
 def make_dataloader(dataset: VCMDataset,

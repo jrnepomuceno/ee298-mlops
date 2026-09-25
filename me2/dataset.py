@@ -154,13 +154,21 @@ class VCMDataset(Dataset):
                  mels_dir: str | Path | None = None,
                  split: str | None = None,
                  manifest_seed: int = 42,
-                 mels_fingerprint: str | None = None):
+                 mels_fingerprint: str | None = None,
+                 noise_snr: float | None = None):
         self.samples = samples
         self.max_frames = max_frames
         self.augment = augment
+        # When set (with augment=True), add white Gaussian noise to the
+        # log-mel at a random SNR in [noise_snr, noise_snr + 10] dB.
+        # Mel-domain so it works on the precomputed-mels path too.
+        self.noise_snr = noise_snr
         self._cache: dict[tuple, torch.Tensor] = {}
         self._mels = None
         self._mels_path: Path | None = None
+        # True (pre-padding) mel-frame count per row. Without it the
+        # length-aware pool / CTC input_lengths degrade to the padded width.
+        self._mels_lengths: np.ndarray | None = None
         if mels_dir is not None:
             if split not in {"train", "val", "test"}:
                 raise ValueError("split must be train, val, or test with mels_dir")
@@ -181,51 +189,71 @@ class VCMDataset(Dataset):
             if shape[0] != len(samples):
                 raise ValueError(f"precomputed mel row mismatch for {split}")
             self._mels_path = mels_path
+            lengths_path = mels_path.with_name(f"mels_{split}_lengths.npy")
+            if lengths_path.exists():
+                lengths = np.load(lengths_path, allow_pickle=False)
+                if lengths.shape != (len(samples),):
+                    raise ValueError(f"mel lengths row mismatch for {split}")
+                self._mels_lengths = lengths.astype(np.int64)
 
     def __len__(self) -> int:
         return len(self.samples)
 
+    def _augment_mel(self, mel: torch.Tensor) -> torch.Tensor:
+        """Train-time augmentation: SpecAugment (+ optional SNR noise)."""
+        mel = audio_utils.spec_augment(mel)
+        if self.noise_snr is not None:
+            snr = float(self.noise_snr + random.random() * 10.0)
+            mel = audio_utils.spec_noise(mel, snr,
+                                         np.random.default_rng())
+        return mel
+
     def _mel(self, sample: dict, idx: int | None = None) -> torch.Tensor:
+        """Raw (un-augmented, un-padded) mel for this sample."""
         if self._mels is not None:
             if idx is None:
                 raise ValueError("precomputed mel lookup requires an index")
-            mel = torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
-            if self.augment:
-                mel = audio_utils.spec_augment(mel)
-            return mel
+            return torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
         if self._mels_path is not None:
             # Open inside each DataLoader worker; Windows spawn cannot pickle
             # an mmap handle created in the parent process.
             self._mels = np.load(self._mels_path, mmap_mode="r", allow_pickle=False)
-            mel = torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
-            if self.augment:
-                mel = audio_utils.spec_augment(mel)
-            return mel
+            return torch.from_numpy(np.asarray(self._mels[idx]).copy()).float()
         if "path" in sample:
             wav = audio_utils.load_wav_mono(sample["path"])
-            mel = audio_utils.mel_spectrogram(wav)
-        else:
-            key = (sample["speaker"], tuple(sample["words"]), sample["seed"])
-            if key in self._cache:
-                return self._cache[key]
-            wav = audio_utils.synthesize_utterance(
-                sample["words"], sample["speaker"], seed=sample["seed"])
-            mel = audio_utils.mel_spectrogram(torch.from_numpy(wav))
-            if len(self._cache) < 2000:
-                self._cache[key] = mel
-        if self.augment:
-            mel = audio_utils.spec_augment(mel)
-        if self.max_frames is not None:
-            mel = audio_utils.pad_or_trim(mel, self.max_frames)
+            return audio_utils.mel_spectrogram(wav)
+        key = (sample["speaker"], tuple(sample["words"]), sample["seed"])
+        if key in self._cache:
+            return self._cache[key]
+        wav = audio_utils.synthesize_utterance(
+            sample["words"], sample["speaker"], seed=sample["seed"])
+        mel = audio_utils.mel_spectrogram(torch.from_numpy(wav))
+        if len(self._cache) < 2000:
+            self._cache[key] = mel
         return mel
+
+    def _true_length(self, sample: dict, idx: int, mel: torch.Tensor) -> int:
+        """True mel-frame count (pre-padding), clamped to max_frames."""
+        if self._mels_lengths is not None:
+            length = int(self._mels_lengths[idx])
+        else:
+            length = mel.shape[0]
+        if self.max_frames is not None:
+            length = min(length, self.max_frames)
+        return max(length, 1)
 
     def __getitem__(self, idx: int):
         sample = self.samples[idx]
         mel = self._mel(sample, idx)
+        length = self._true_length(sample, idx, mel)
+        if self.augment:
+            mel = self._augment_mel(mel)
+        if self.max_frames is not None:
+            mel = audio_utils.pad_or_trim(mel, self.max_frames)
         intent_id = config.INTENT_TO_ID.get(sample["intent"],
                                             config.INTENT_TO_ID[config.OOV_INTENT])
         transcript = sample.get("transcript") or " ".join(sample["words"])
-        return mel, intent_id, transcript
+        return mel, intent_id, transcript, length
 
 
 def split_samples(samples: list[dict],
