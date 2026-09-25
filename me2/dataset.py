@@ -155,14 +155,30 @@ class VCMDataset(Dataset):
                  split: str | None = None,
                  manifest_seed: int = 42,
                  mels_fingerprint: str | None = None,
-                 noise_snr: float | None = None):
+                 noise_snr: float | None = None,
+                 noise_dir: str | Path | None = None):
         self.samples = samples
         self.max_frames = max_frames
         self.augment = augment
-        # When set (with augment=True), add white Gaussian noise to the
-        # log-mel at a random SNR in [noise_snr, noise_snr + 10] dB.
-        # Mel-domain so it works on the precomputed-mels path too.
+        # When set (with augment=True), add noise to the log-mel at a random
+        # SNR in [noise_snr, noise_snr + 10] dB. Mel-domain so it works on
+        # the precomputed-mels path too. With noise_dir, mixes real ambient
+        # clips (e.g. speech-kws _background_noise_); without it, white
+        # Gaussian (the original behaviour).
         self.noise_snr = noise_snr
+        self._noise_mels: list[torch.Tensor] = []
+        if noise_dir is not None and noise_snr is not None:
+            for wav_path in sorted(Path(noise_dir).glob("*.wav")):
+                try:
+                    wav = audio_utils.load_wav_mono(wav_path)
+                except Exception as exc:  # noqa: BLE001 - skip unreadable clip
+                    warnings.warn(f"noise clip unreadable, skipping: {wav_path}: {exc}")
+                    continue
+                if wav.numel() >= 16000:  # >= 1 s of audio
+                    self._noise_mels.append(audio_utils.mel_spectrogram(wav))
+            if not self._noise_mels:
+                warnings.warn(f"no usable noise clips in {noise_dir}; "
+                              "falling back to white Gaussian noise")
         self._cache: dict[tuple, torch.Tensor] = {}
         self._mels = None
         self._mels_path: Path | None = None
@@ -199,13 +215,31 @@ class VCMDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
+    def _add_noise_mel(self, mel: torch.Tensor, snr: float) -> torch.Tensor:
+        """Add noise to a log-mel at a target SNR (dB).
+
+        With preloaded ambient clips: pick a random clip, crop a random
+        window of the sample's length, scale its mel power to the target
+        SNR, add. Without clips: white Gaussian (spec_noise). Mel-domain
+        power, same convention as audio_utils.spec_noise.
+        """
+        if self._noise_mels:
+            noise = random.choice(self._noise_mels)
+            n = mel.shape[0]
+            start = random.randint(0, max(noise.shape[0] - n, 0))
+            noise = noise[start:start + n]
+            power = mel.pow(2).mean().clamp_min(1e-10)
+            noise_power = power / (10.0 ** (snr / 10.0))
+            scale = (noise_power / noise.pow(2).mean().clamp_min(1e-10)).sqrt()
+            return mel + noise * scale
+        return audio_utils.spec_noise(mel, snr, np.random.default_rng())
+
     def _augment_mel(self, mel: torch.Tensor) -> torch.Tensor:
         """Train-time augmentation: SpecAugment (+ optional SNR noise)."""
         mel = audio_utils.spec_augment(mel)
         if self.noise_snr is not None:
             snr = float(self.noise_snr + random.random() * 10.0)
-            mel = audio_utils.spec_noise(mel, snr,
-                                         np.random.default_rng())
+            mel = self._add_noise_mel(mel, snr)
         return mel
 
     def _mel(self, sample: dict, idx: int | None = None) -> torch.Tensor:

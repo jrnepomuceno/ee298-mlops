@@ -93,8 +93,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--pin-memory", action="store_true",
                    help="pin CPU batches for async H2D copies (GPU runs)")
     p.add_argument("--noise-snr", type=float, default=None,
-                   help="train-only: add white Gaussian noise to the log-mel "
-                        "at a random SNR in [value, value+10] dB (e.g. 15)")
+                   help="train-only: add noise to the log-mel at a random "
+                        "SNR in [value, value+10] dB (e.g. 15)")
+    p.add_argument("--noise-dir", type=str, default=None,
+                   help="directory of ambient noise WAVs (16 kHz) to mix in "
+                        "with --noise-snr (e.g. speech-kws _background_noise_); "
+                        "defaults to white Gaussian when omitted")
     p.add_argument("--amp", action="store_true",
                    help="bfloat16 autocast for the training step (cuda only)")
     p.add_argument("--device", type=str, default="auto",
@@ -136,7 +140,8 @@ def get_split_loaders(args, device) -> tuple:
                           mels_dir=args.mels_dir, split="train",
                           manifest_seed=args.seed,
                           mels_fingerprint=mels_fingerprint,
-                          noise_snr=args.noise_snr)
+                          noise_snr=args.noise_snr,
+                          noise_dir=args.noise_dir)
     val_ds = VCMDataset(val_s, max_frames=args.max_frames, augment=False,
                         mels_dir=args.mels_dir, split="val",
                         manifest_seed=args.seed,
