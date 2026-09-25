@@ -57,6 +57,9 @@ class HarnessConfig:
 class DryRunDispatcher:
     """Allowlisted action dispatcher with no external side effects."""
 
+    def __init__(self, timer_manager: Any | None = None) -> None:
+        self.timer_manager = timer_manager
+
     def dispatch(self, result: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(result, dict):
             return self._rejected("invalid_result", "invalid_result")
@@ -74,6 +77,15 @@ class DryRunDispatcher:
         action = ACTION_BY_INTENT.get(intent)
         if action is None:
             return self._rejected("unsupported", "intent_not_allowlisted")
+        if intent == "set_timer" and self.timer_manager is not None:
+            try:
+                return self.timer_manager.start(
+                    slots.get("duration"), slots.get("duration_unit", "minute")
+                )
+            except ValueError:
+                return self._rejected("invalid_timer", "invalid_timer_slots")
+        if intent == "cancel_timer" and self.timer_manager is not None:
+            return self.timer_manager.cancel()
         return {
             "status": "dry_run",
             "action": action,

@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from collections import deque
+from contextlib import closing
 from dataclasses import dataclass
 from queue import Queue
+import shutil
+import subprocess
 import time
 from datetime import datetime
 from typing import Any, Iterator
@@ -107,13 +110,6 @@ def microphone_utterances(config: VADConfig | None = None,
     ``sounddevice`` is imported lazily so replay/self-test mode does not need a
     recording device or the sounddevice package.
     """
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise RuntimeError(
-            "microphone mode requires sounddevice; install requirements-runtime.txt"
-        ) from exc
-
     vad = EnergyVAD(config)
     wakeword_active = wakeword is None
     speech_announced = False
@@ -121,32 +117,35 @@ def microphone_utterances(config: VADConfig | None = None,
     settings = vad.config
     frames: Queue[np.ndarray] = Queue()
 
-    def on_audio(indata, _frames, _time, status) -> None:
-        if status:
-            log(f"[audio] {status}")
-        frame = np.asarray(indata, dtype=np.float32).reshape(-1)
-        frames.put(resample_frame(frame))
-
-    def resample_frame(frame: np.ndarray) -> np.ndarray:
+    def resample_frame(frame: np.ndarray, source_rate: int) -> np.ndarray:
         frame = np.asarray(frame, dtype=np.float32).reshape(-1)
-        if settings.capture_sample_rate == settings.sample_rate:
+        if source_rate == settings.sample_rate:
             return frame
-        target_size = round(frame.size * settings.sample_rate /
-                            settings.capture_sample_rate)
+        target_size = round(frame.size * settings.sample_rate / source_rate)
         source_x = np.linspace(0.0, 1.0, frame.size, endpoint=False)
         target_x = np.linspace(0.0, 1.0, target_size, endpoint=False)
         return np.interp(target_x, source_x, frame).astype(np.float32)
 
-    with sd.InputStream(
-        device=settings.capture_device,
-        samplerate=settings.capture_sample_rate,
-        blocksize=vad.capture_frame_samples,
-        channels=1,
-        dtype="float32",
-        callback=on_audio,
-    ):
+    pipewire = shutil.which("pw-record") is not None
+    if pipewire:
+        capture_source = _pipewire_capture(settings)
+        capture_context = closing(capture_source)
+        get_frame = lambda: resample_frame(next(capture_source), 48000)
+        discard_frame = get_frame
+    else:
+        capture_context = _sounddevice_capture(
+            settings, vad.capture_frame_samples, frames
+        )
+
+        def get_frame() -> np.ndarray:
+            return frames.get()
+
+        def discard_frame() -> np.ndarray:
+            return frames.get()
+
+    with capture_context:
         while True:
-            frame = frames.get()
+            frame = get_frame()
             if not wakeword_active:
                 if not wakeword.accepts(frame):
                     continue
@@ -154,15 +153,10 @@ def microphone_utterances(config: VADConfig | None = None,
                 if on_wake is not None:
                     on_wake()
                 vad.reset()
-                while not frames.empty():
-                    frames.get_nowait()
                 if cooldown_s > 0:
                     deadline = time.monotonic() + cooldown_s
                     while time.monotonic() < deadline:
-                        try:
-                            frames.get(timeout=0.05)
-                        except Exception:
-                            pass
+                        discard_frame()
                 speech_announced = True
                 if wake_only:
                     wakeword_active = False
@@ -182,10 +176,7 @@ def microphone_utterances(config: VADConfig | None = None,
                 if cooldown_s > 0:
                     deadline = time.monotonic() + cooldown_s
                     while time.monotonic() < deadline:
-                        try:
-                            frames.get(timeout=0.05)
-                        except Exception:
-                            pass
+                        discard_frame()
                 wakeword_active = wakeword is None
                 continue
             utterance = vad.accept(frame)
@@ -203,11 +194,64 @@ def microphone_utterances(config: VADConfig | None = None,
                 if cooldown_s > 0:
                     deadline = time.monotonic() + cooldown_s
                     while time.monotonic() < deadline:
-                        try:
-                            frames.get(timeout=0.05)
-                        except Exception:
-                            pass
+                        discard_frame()
                 vad.reset()
                 if wakeword is not None and hasattr(wakeword, "reset"):
                     wakeword.reset()
                 wakeword_active = wakeword is None
+
+
+def _pipewire_capture(settings: VADConfig) -> Iterator[np.ndarray]:
+    """Yield mono PCM frames from the PipeWire default capture source."""
+    command = [
+        "pw-record", "--raw", "--rate=48000", "--channels=1",
+        "--format=s16",
+    ]
+    if settings.capture_device:
+        command.extend(["--target", settings.capture_device])
+    command.append("-")
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
+    assert process.stdout is not None
+    frame_bytes = round(48000 * settings.frame_ms / 1000) * 2
+    try:
+        while True:
+            data = process.stdout.read(frame_bytes)
+            if len(data) != frame_bytes:
+                return
+            yield np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
+def _sounddevice_capture(settings: VADConfig, frame_samples: int,
+                         frames: Queue[np.ndarray]) -> Any:
+    """Return the legacy PortAudio capture context when PipeWire is absent."""
+    try:
+        import sounddevice as sd
+    except ImportError as exc:
+        raise RuntimeError(
+            "microphone mode requires pw-record or sounddevice; "
+            "install requirements-runtime.txt"
+        ) from exc
+
+    def on_audio(indata, _frames, _time, status) -> None:
+        if status:
+            log(f"[audio] {status}")
+        frame = np.asarray(indata, dtype=np.float32).reshape(-1)
+        frames.put(frame)
+
+    return sd.InputStream(
+        device=settings.capture_device,
+        samplerate=settings.capture_sample_rate,
+        blocksize=frame_samples,
+        channels=1,
+        dtype="float32",
+        callback=on_audio,
+    )

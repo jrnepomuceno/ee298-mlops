@@ -1,6 +1,7 @@
 """Deterministic, offline assistant replies for recognized commands."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 
@@ -64,7 +65,7 @@ def build_reply(result: dict[str, Any] | None, action: dict[str, Any] | None) ->
         "cancel_timer": f"{prefix}cancel the timer.",
         "remind": f"{prefix}remind you to {slots.get('note', 'do that')}.",
         "call": f"{prefix}call {slots.get('contact', 'that contact')}.",
-        "what_time": "The current time is available locally.",
+        "what_time": f"The time is {_local_time_text()}.",
         "what_weather": "Weather is not available without a configured local source.",
         "what_reminders": "Your local reminders are available.",
     }
@@ -78,3 +79,9 @@ def _timer_reply(prefix: str, slots: dict[str, Any]) -> str:
     if duration is None:
         return f"{prefix}set the timer."
     return f"{prefix}set a timer for {duration} {unit}."
+
+
+def _local_time_text() -> str:
+    """Return the host's local time in concise speech-friendly form."""
+    text = datetime.now().astimezone().strftime("%I:%M %p")
+    return text.lstrip("0")
