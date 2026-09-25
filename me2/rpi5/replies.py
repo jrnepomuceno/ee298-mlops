@@ -24,8 +24,10 @@ REPLY_WAV_BY_INTENT = {
 }
 
 
-def reply_wav_name(result: dict[str, Any], action: dict[str, Any]) -> str:
+def reply_wav_name(result: dict[str, Any] | None, action: dict[str, Any] | None) -> str:
     """Select a static reply WAV for a recognition event."""
+    result = result or {}
+    action = action or {}
     if action.get("code") == "out_of_vocabulary":
         return "oov.wav"
     if action.get("code") == "confidence_below_threshold":
@@ -33,9 +35,11 @@ def reply_wav_name(result: dict[str, Any], action: dict[str, Any]) -> str:
     return REPLY_WAV_BY_INTENT.get(result.get("intent", "oov"), "oov.wav")
 
 
-def build_reply(result: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+def build_reply(result: dict[str, Any] | None, action: dict[str, Any] | None) -> dict[str, Any]:
     """Build a truthful spoken/display reply without an LLM or ASR."""
-    if action["status"] == "rejected":
+    result = result or {}
+    action = action or {}
+    if action.get("status") == "rejected":
         if action.get("code") == "out_of_vocabulary":
             text = "I did not recognize that command."
         elif action.get("code") == "confidence_below_threshold":
@@ -44,9 +48,9 @@ def build_reply(result: dict[str, Any], action: dict[str, Any]) -> dict[str, Any
             text = "I cannot perform that command yet."
         return {"text": text, "speak": True, "source": "template"}
 
-    intent = result["intent"]
+    intent = result.get("intent", "unknown")
     slots = result.get("slots") or {}
-    prefix = "I would " if action["status"] == "dry_run" else ""
+    prefix = "I would " if action.get("status") == "dry_run" else ""
     templates = {
         "turn_on_lights": f"{prefix}turn the lights on.",
         "turn_off_lights": f"{prefix}turn the lights off.",

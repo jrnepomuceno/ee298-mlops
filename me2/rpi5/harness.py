@@ -57,12 +57,18 @@ class HarnessConfig:
 class DryRunDispatcher:
     """Allowlisted action dispatcher with no external side effects."""
 
-    def dispatch(self, result: dict[str, Any]) -> dict[str, Any]:
-        intent = result["intent"]
-        confidence = float(result["intent_confidence"])
+    def dispatch(self, result: dict[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return self._rejected("invalid_result", "invalid_result")
+
+        intent = result.get("intent")
+        confidence = float(result.get("intent_confidence", 0.0))
+        min_confidence = float(result.get("min_confidence", 0.0))
+        slots = result.get("slots") or {}
+
         if intent == "oov":
             return self._rejected("oov", "out_of_vocabulary")
-        if confidence < result["min_confidence"]:
+        if confidence < min_confidence:
             return self._rejected("low_confidence", "confidence_below_threshold")
 
         action = ACTION_BY_INTENT.get(intent)
@@ -71,7 +77,7 @@ class DryRunDispatcher:
         return {
             "status": "dry_run",
             "action": action,
-            "slots": result["slots"],
+            "slots": slots,
             "side_effects": False,
         }
 

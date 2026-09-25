@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from rpi5.harness import DryRunDispatcher
 from rpi5.state_machine import HarnessStateMachine, State
 
 
@@ -93,6 +94,18 @@ class StateMachineTests(unittest.TestCase):
         self.assertIsNone(machine.handle_wake())
         self.assertEqual(rgb.calls, [])
         self.assertEqual(calls, [])
+
+    def test_dispatcher_handles_partial_inference_results(self):
+        dispatcher = DryRunDispatcher()
+
+        outcome = dispatcher.dispatch({
+            "intent": "turn_on_lights",
+            "intent_confidence": 0.91,
+            "slots": {},
+        })
+
+        self.assertEqual(outcome["status"], "dry_run")
+        self.assertEqual(outcome["action"], "lights.on")
 
     def test_cancel_listening_returns_to_standby(self):
         machine, rgb, calls = self.make_machine()
