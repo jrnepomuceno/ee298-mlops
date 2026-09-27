@@ -11,5 +11,15 @@ venv/
 # Data caches (auto-downloaded by torchvision)
 me1/data/
 
+# Continue.dev agent configs (contain live API keys)
+me2/.continue/
+
+# ME2 build artifacts (regeneratable — keep out of git)
+me2/**/*.pt
+me2/**/*.onnx
+me2/**/*.onnx.data
+me2/**/*.wav
+me2/**/venv/
+
 # macOS
 .DS_Store

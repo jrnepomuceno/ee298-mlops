@@ -1,5 +1,6 @@
 """Entry point for Pi5-VCM.
 
+
 Usage:
     python main.py generate            # build synthetic manifest -> data/manifest.jsonl
     python main.py train --epochs 10   # train on the configured VCM manifest
