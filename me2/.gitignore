@@ -21,3 +21,6 @@ data/mels/
 # Tooling configs that may contain secrets
 .continue/
 *.env
+
+# Synthetic benchmark clips (regenerable test data, not source)
+bench_wavs/

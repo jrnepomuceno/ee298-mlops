@@ -114,11 +114,11 @@ def resolve_checkpoint(raw: str) -> Path:
     p = Path(raw)
     if p.is_absolute():
         return p
-    for base in (HERE, HERE.parent):
+    for base in (ROOT, ROOT.parent):
         cand = base / p
         if cand.exists():
             return cand
-    return HERE / p
+    return ROOT / p
 
 
 def main(argv=None) -> int:
