@@ -12,6 +12,11 @@ Two ways to get samples:
 
 from __future__ import annotations
 
+import os, sys as _sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 import csv
 import json
 import random

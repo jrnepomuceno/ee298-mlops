@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os, sys as _sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 import time
 
 import torch
@@ -9,7 +14,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 import config
-from model import VCM, ctc_decode_batch, parse_slots
+from model.model import VCM, ctc_decode_batch, parse_slots
 from utils import model_utils
 
 

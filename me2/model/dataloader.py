@@ -6,11 +6,16 @@ the CTC loss needs (packed token ids + token lengths).
 
 from __future__ import annotations
 
+import os, sys as _sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 import torch
 from torch.utils.data import DataLoader
 
 import config
-from dataset import VCMDataset
+from model.dataset import VCMDataset
 
 
 def collate_fn(batch):

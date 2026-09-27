@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build / training artifacts (regenerate, don't commit)
+*.pt
+*.onnx
+*.bak
+checkpoints/
+data/mels/
+*.log
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Tooling configs that may contain secrets
+.continue/
+*.env

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os, sys as _sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 import argparse
 import json
 from multiprocessing import Pool
@@ -11,7 +16,7 @@ import time
 import numpy as np
 import torch
 
-from dataset import load_manifest, manifest_fingerprint, split_samples
+from model.dataset import load_manifest, manifest_fingerprint, split_samples
 from utils.audio_utils import load_wav_mono, mel_spectrogram, pad_or_trim
 
 

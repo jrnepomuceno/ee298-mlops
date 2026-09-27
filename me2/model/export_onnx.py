@@ -19,7 +19,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import config
-from model import VCM
+from model.model import VCM
 from utils.model_utils import get_device, load_checkpoint
 
 

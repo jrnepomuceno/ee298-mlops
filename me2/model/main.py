@@ -13,6 +13,11 @@ Everything runs CPU-only on the Pi; device=auto picks cuda/mps if present.
 
 from __future__ import annotations
 
+import os, sys as _sys
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
@@ -25,11 +30,11 @@ from pathlib import Path
 import torch
 
 import config
-from dataset import (VCMDataset, build_synthetic_manifest, load_manifest,
+from model.dataset import (VCMDataset, build_synthetic_manifest, load_manifest,
                      manifest_fingerprint, split_samples)
-from dataloader import make_dataloader
-from model import VCM, ctc_decode_batch, parse_slots
-from train import test, train_one_epoch, validate
+from model.dataloader import make_dataloader
+from model.model import VCM, ctc_decode_batch, parse_slots
+from model.train import test, train_one_epoch, validate
 from utils import audio_utils
 from utils.model_utils import (get_device, load_checkpoint, save_checkpoint,
                                set_seed)
