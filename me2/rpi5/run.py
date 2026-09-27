@@ -92,10 +92,13 @@ def parse_args() -> argparse.Namespace:
     source.add_argument("--vcm-only", action="store_true",
                         help="test VCM directly without a wakeword")
     model = parser.add_argument_group("model")
-    model.add_argument("--checkpoint", default="inference/best.pt",
-                       help="VCM checkpoint (default: inference/best.pt)")
-    model.add_argument("--device", default="auto",
-                       choices=["auto", "cpu", "cuda", "mps"])
+    model.add_argument("--checkpoint", default="vcm_model_int8.onnx",
+                       help="VCM ONNX model (default: vcm_model_int8.onnx)")
+    model.add_argument("--device", default="cpu",
+                       choices=["auto", "cpu", "cuda", "mps"],
+                       help="informational; the ONNX path always runs on CPU")
+    model.add_argument("--threads", type=int, default=2,
+                       help="ORT intra_op_num_threads (default: 2 for Pi5)")
     model.add_argument("--max-frames", type=int, default=400,
                        help="maximum mel frames per utterance (default: 400)")
     model.add_argument("--min-confidence", type=float, default=0.75,
@@ -205,6 +208,7 @@ def main() -> int:
             max_frames=args.max_frames,
             min_confidence=args.min_confidence,
             warmup=0 if args.no_warmup else 1,
+            threads=args.threads,
         ), dispatcher=DryRunDispatcher(timer_manager))
         if warming:
             if wav_player is not None:
