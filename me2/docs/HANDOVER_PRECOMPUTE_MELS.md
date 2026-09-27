@@ -105,7 +105,7 @@ spec_augment (train mode only)                                     ← STOCHASTI
   tarballs, untracked `best.pt.synthetic.bak` + `recording/speakers.txt`. User's call to commit.
 - **Docs trilogy** in `~/MyPlayground/Datasets/`: `DATASETS.md` (inventory),
   `distilled/FIX_PLAN.md` (manifest→VCM contract), `INTENT_COVERAGE.md` (16-intent coverage,
-  gaps, ranked optimizations: record cancel_timer, distill MLEnd as slot track, cap kws
+  gaps, ranked optimizations: record stop_timer, distill MLEnd as slot track, cap kws
   single-words, per-intent caps).
 - **`me2_work/`** = working copy of `me2/` (session dir). Implement here, then sync.
 

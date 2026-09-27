@@ -26,7 +26,7 @@ INTENTS = [
     "stop_music",
     "set_timer",
     "set_alarm",
-    "cancel_timer",
+    "stop_timer",
     "remind",
     "call",
     "what_time",

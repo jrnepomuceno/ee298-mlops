@@ -45,7 +45,7 @@ ACTION_BY_INTENT = {
     "stop_music": "media.stop",
     "set_timer": "timer.set",
     "set_alarm": "alarm.set",
-    "cancel_timer": "timer.cancel",
+    "stop_timer": "timer.cancel",
     "remind": "reminder.create",
     "call": "call.request",
     "what_time": "query.time",
@@ -94,7 +94,7 @@ class DryRunDispatcher:
                 )
             except ValueError:
                 return self._rejected("invalid_timer", "invalid_timer_slots")
-        if intent == "cancel_timer" and self.timer_manager is not None:
+        if intent == "stop_timer" and self.timer_manager is not None:
             return self.timer_manager.cancel()
         return {
             "status": "dry_run",

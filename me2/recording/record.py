@@ -79,7 +79,7 @@ _FALLBACK_TEMPLATES: list[tuple[str, list[str]]] = [
                    "set a timer for {num} seconds"]),
     ("set_alarm", ["set an alarm for {num} {ampm}",
                    "set alarm for {num} {ampm}"]),
-    ("cancel_timer", ["cancel the timer", "cancel timer", "stop the timer"]),
+    ("stop_timer", ["stop the timer", "stop timer", "cancel the timer"]),
     ("remind", ["remind me to water the plants", "remind me to buy milk",
                 "remind me to buy bread", "remind me to buy eggs",
                 "remind me about the meeting", "remind me about the doctor",

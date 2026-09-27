@@ -24,7 +24,7 @@ yields a transcript, and deterministic regexes turn (intent, transcript) into sl
 ### Intent taxonomy (16 classes)
 
 `turn_on_lights`, `turn_off_lights`, `dim_lights`, `set_temperature`, `play_music`,
-`pause_music`, `stop_music`, `set_timer`, `set_alarm`, `cancel_timer`, `remind`, `call`,
+`pause_music`, `stop_music`, `set_timer`, `set_alarm`, `stop_timer`, `remind`, `call`,
 `what_time`, `what_weather`, `what_reminders`, `oov`
 
 ---

@@ -81,18 +81,18 @@ ground truth for on-distribution quality:
 | val macro-F1 | **0.9641** |
 | **val exact-match (slots)** | **0.1729** |
 | val WER / CER | 0.387 / 0.447 |
-| `cancel_timer` support | **0** (never in validation) |
+| `stop_timer` support | **0** (never in validation) |
 
 Interpretation:
 - **Intent head is strong** on the training distribution (97.9% acc, 96.4% macro-F1).
 - **Slot/CTC head is weak** even on validation: only 17.3% exact-match, WER 0.387. The
   rule-based `parse_slots` is only as good as the decoded transcript, so **slot reliability
   is the model's real weakness** — independent of the Pi and of int8.
-- `cancel_timer` was never represented in validation → untested.
+- `stop_timer` was never represented in validation → untested.
 
 **Therefore the ≥ 90% intent gate is met on-distribution, but real-world performance on
 recorded human speech is unproven.** The decisive next step (Area 1's open item) is a
-**small real recorded dataset** (a few dozen clips per intent, including `cancel_timer`
+**small real recorded dataset** (a few dozen clips per intent, including `stop_timer`
 and OOV), then retrain and re-validate — expecting the slot head to improve most.
 
 ## 6. Bugs found & fixed in this pass
