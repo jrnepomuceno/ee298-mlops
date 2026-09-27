@@ -21,8 +21,8 @@ from inference.infer import (
     run_utterance,
     self_test_wavs,
 )
-from inference.utils import audio_utils
-from inference.utils.model_utils import get_device
+from utils import audio_utils
+from utils.model_utils import get_device
 from .replies import build_reply
 
 

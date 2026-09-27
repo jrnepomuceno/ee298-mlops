@@ -23,11 +23,13 @@ from pathlib import Path
 
 import torch
 
-# Make the vendored project modules (config, model, utils) importable
-# regardless of the current working directory.
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+# The canonical project modules (config, model/, utils/) live at the project
+# root, one level above this folder. Put the root on sys.path so they resolve
+# regardless of the current working directory. There are no vendored copies
+# here anymore -- a single source of truth.
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import config  # noqa: E402
 from model import VCM, ctc_decode_batch, parse_slots  # noqa: E402
