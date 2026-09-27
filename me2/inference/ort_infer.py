@@ -44,7 +44,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import config  # noqa: E402
-from model.model import parse_slots  # noqa: E402  (pure-python, no torch)
+from model.slots import parse_slots  # noqa: E402  (torch-free leaf module)
 try:
     from .features import kaldi_fbank, load_wav_mono, synthesize_utterance  # noqa: E402
 except ImportError:  # direct script run (python inference/ort_infer.py)
