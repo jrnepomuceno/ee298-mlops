@@ -189,6 +189,77 @@ class WhatTimeAnswerSourceTests(unittest.TestCase):
         self.assertTrue(result.handled)
         self.assertEqual(result.reply_text, "12:00 PM")
 
+class WeatherProviderTests(unittest.TestCase):
+    """Live OpenWeatherMap provider: formatting, env handling, executor wiring."""
+
+    def test_condition_word_mapping(self):
+        from rpi5.weather import _condition_word
+        self.assertEqual(_condition_word("Clear", "clear sky"), "clear skies")
+        self.assertEqual(_condition_word("Clouds", "broken clouds"), "cloudy")
+        self.assertEqual(_condition_word("Rain", "light rain"), "rainy")
+        # Unknown main falls back to the description, lower-cased, no period.
+        self.assertEqual(_condition_word("Weird", "Scattered showers."), "scattered showers")
+
+    def test_spoken_line_format_from_mock_response(self):
+        import rpi5.weather as w
+        fake = {
+            "cod": "200",
+            "main": {"temp": 24.6},
+            "weather": [{"main": "Clouds", "description": "broken clouds"}],
+        }
+        orig = w._fetch_current
+        w._fetch_current = lambda loc, key: fake
+        try:
+            fn = w.make_weather_fn(location="Quezon City", api_key="k")
+            line = fn()
+        finally:
+            w._fetch_current = orig
+        self.assertEqual(line, "It's 25 degrees and cloudy in Quezon City.")
+        self.assertNotIn("%", line)
+
+    def test_missing_api_key_raises(self):
+        import os
+        import rpi5.weather as w
+        saved = os.environ.pop("OPENWEATHER_API_KEY", None)
+        try:
+            fn = w.make_weather_fn(location="Quezon City", api_key=None)
+            with self.assertRaises(RuntimeError):
+                fn()
+        finally:
+            if saved is not None:
+                os.environ["OPENWEATHER_API_KEY"] = saved
+
+    def test_error_response_raises(self):
+        import rpi5.weather as w
+        orig = w._fetch_current
+        w._fetch_current = lambda loc, key: {"cod": "404", "message": "city not found"}
+        try:
+            fn = w.make_weather_fn(location="Nowhere", api_key="k")
+            with self.assertRaises(RuntimeError):
+                fn()
+        finally:
+            w._fetch_current = orig
+
+    def test_executor_speaks_live_weather_answer(self):
+        """End-to-end: what_weather -> InfoExecutor -> spoken reply == live answer."""
+        from rpi5.executors.info import InfoExecutor
+        orch = Orchestrator({"info": InfoExecutor(dry_run=False,
+                                                  weather_fn=lambda: "It's 30 degrees and clear skies in Quezon City.")})
+        req = decode("what_weather", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        self.assertEqual(result.reply_text,
+                         "It's 30 degrees and clear skies in Quezon City.")
+        self.assertEqual(result.execution.payload["answer"], result.reply_text)
+
+    def test_executor_falls_back_without_weather_fn(self):
+        from rpi5.executors.info import InfoExecutor
+        orch = Orchestrator({"info": InfoExecutor(dry_run=False)})
+        req = decode("what_weather", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        self.assertIn("not available", result.reply_text)
+
 
 if __name__ == "__main__":
     unittest.main()

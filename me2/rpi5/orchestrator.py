@@ -151,8 +151,13 @@ class Orchestrator:
 def default_orchestrator(*, rgb: Any | None = None,
                          speak: Callable[[str], None] | None = None,
                          on_event: Callable[[Mapping[str, Any]], None] | None = None,
-                         dry_run: bool = True) -> Orchestrator:
-    """Build an orchestrator wired to the stock dry-run executors for all 7 categories."""
+                         dry_run: bool = True,
+                         weather_fn: Callable[[], str] | None = None) -> Orchestrator:
+    """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
+
+    ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
+    ``what_weather`` intent can return a live, spoken-friendly line.
+    """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
         ReminderExecutor, CommsExecutor, InfoExecutor,
@@ -164,6 +169,6 @@ def default_orchestrator(*, rgb: Any | None = None,
         "timer": TimerExecutor(dry_run),
         "remind": ReminderExecutor(dry_run),
         "comms": CommsExecutor(dry_run),
-        "info": InfoExecutor(dry_run),
+        "info": InfoExecutor(dry_run, weather_fn=weather_fn),
     }
     return Orchestrator(ex, rgb=rgb, speak=speak, on_event=on_event)

@@ -21,6 +21,7 @@ from .rgb import RgbController
 from .state_machine import HarnessStateMachine
 from .tts import PiperTts, WavPlayer
 from .timer import TimerManager
+from .weather import make_weather_fn
 from .wakeword import OpenWakeWordDetector
 
 
@@ -136,6 +137,12 @@ def parse_args() -> argparse.Namespace:
                                     "piper-voices/en_US-lessac-medium.onnx"),
                         help="Piper voice model for dynamic replies")
 
+    weather = parser.add_argument_group("weather")
+    weather.add_argument("--weather-location", default=None,
+                         help="City for what_weather (default: $WEATHER_LOCATION or Quezon City)")
+    weather.add_argument("--no-weather", action="store_true",
+                         help="Disable live weather lookup (use the offline fallback line)")
+
     warmup = parser.add_argument_group("warmup")
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
@@ -205,7 +212,9 @@ def main() -> int:
         if warming:
             log("[warming] loading checkpoint and warming model")
             rgb.warming(args.warmup_color)
-        pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True)
+        weather_fn = None if args.no_weather else make_weather_fn(args.weather_location)
+        pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True,
+                                  weather_fn=weather_fn)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,

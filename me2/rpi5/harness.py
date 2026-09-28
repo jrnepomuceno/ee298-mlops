@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 import numpy as np
@@ -126,8 +126,10 @@ class FacadePipeline:
     """
 
     def __init__(self, orchestrator: Orchestrator | None = None,
-                 *, threshold: float = 0.75, dry_run: bool = True) -> None:
-        self.orchestrator = orchestrator or default_orchestrator(dry_run=dry_run)
+                 *, threshold: float = 0.75, dry_run: bool = True,
+                 weather_fn: "Callable[[], str] | None" = None) -> None:
+        self.orchestrator = orchestrator or default_orchestrator(
+            dry_run=dry_run, weather_fn=weather_fn)
         self.threshold = threshold
         self.dry_run = dry_run
 
