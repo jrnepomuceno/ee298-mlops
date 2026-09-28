@@ -12,7 +12,7 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 1 | `turn_on_lights`  | lights | —          | 🟢 Built | pluggable `LightDriver` (default `HyperxDuoCastDriver` via `quadcastrgb`); `--light-driver` selects device |
 | 2 | `turn_off_lights` | lights | —          | 🟢 Built | same driver; remembers last brightness so a bare "on" restores it |
 | 3 | `dim_lights`      | lights | `percent` 1–100 | 🟢 Built | brightness → colour scaling (ring has no separate brightness channel) |
-| 4 | `set_temperature` | hvac   | `temp` 10–35   | 🔴 Stub | "hvac live driver not wired yet". No relay/controller yet. |
+| 4 | `set_temperature` | hvac   | `temperature` 10–35   | 🔴 Built | audio-only: validates set-point, confirms by voice; structured `payload` for a future controller (see notes below) |
 | 5 | `play_music`      | media  | —          | 🟢 Built | `MediaPlayerController` (needs `--music-dir --live-media`) |
 | 6 | `pause_music`     | media  | —          | 🟢 Built | same controller |
 | 7 | `stop_music`      | media  | —          | 🟢 Built | same controller |
@@ -29,14 +29,14 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 18 | `what_reminders`  | info   | —          | 🟢 Built | reads `ReminderStore` |
 
 ## Scoreboard
-- 🟢 **17 built** — lights, media, volume, timer (countdown + cancel), reminders, info.
+- 🟢 **18 built** — lights, hvac (audio-only set-point), media, volume, timer (countdown + cancel), reminders, info.
 - 🟡 **0 partial**
-- 🔴 **2 not started** — hvac (1), call (1).
+- 🔴 **1 not started** — call (1).
 
 ## Recommended build order
 1. ~~`set_alarm`~~ ✅ *built 2026-09-28*
 2. ~~**Lights**~~ ✅ *built 2026-09-28* — pluggable `LightDriver`; HyperX DuoCast default, swappable via `--light-driver`.
-3. **HVAC** — needs a relay/controller backend.
+3. ~~**HVAC**~~ ✅ *built 2026-09-28* — audio-only set-point; confirms by voice, structured `payload` ready for a future controller.
 4. **Call** — last, or leave as graceful stub.
 
 ---
@@ -95,6 +95,27 @@ indicator.
   `default_orchestrator(light_driver=...)` → `LightExecutor`.
 - **Tests:** `tests/test_lights.py` (registry, colour scaling, degrade-when-absent,
   executor on/off/dim + failures, dry-run fallback, full-stack orchestration).
+
+### HVAC (added 2026-09-28)
+`set_temperature` is now **audio-only**: the recognized set-point is validated
+and confirmed back by voice. No relay/controller is wired, so nothing physical
+is touched — the "side effect" is the spoken confirmation plus a structured
+`payload` a future controller can consume without re-parsing speech.
+
+- **Slot:** arrives as `temperature` (see `model/slots.py` and the facade's
+  `INTENT_SPECS`). Valid band **10–35 °C**.
+- **Validation is layered.** The facade gate already rejects out-of-band /
+  missing / non-numeric values as `invalid_slot` *before* the executor runs
+  ("Sorry, that didn't work."). The `HvacExecutor` re-checks the same band as a
+  defensive backstop, so it is safe even if the gate is bypassed.
+- **Reply:** `Setting the temperature to {n} degrees.` — carried in
+  `payload["answer"]`, which the orchestrator prefers over the facade template
+  when present. `payload` also carries `{"temperature": n, "unit": "C"}`.
+- **Future controller:** to make it physical, attach a controller in
+  `HvacExecutor._live` (mirror how `LightExecutor` drives its `LightDriver`)
+  and flip `side_effects=True`. The slot and payload are already shaped for it.
+- **Tests:** `tests/test_hvac.py` (facade gate, executor valid/edges/unsupported/
+  defensive-bad-slot, dry-run fallback, full-stack orchestration).
 
 ## Files touched
 | File | Change |
