@@ -64,6 +64,23 @@ class TimerManager:
             "side_effects": True,
         }
 
+    def set_timer(self, duration: object, unit: object = "minute") -> dict[str, object]:
+        """Convenience wrapper for :meth:`start` used by the timer executor.
+
+        Accepts ``(duration, unit)`` straight from the model slots, e.g.
+        ``set_timer(30, "second")`` or ``set_timer(5, "minute")``. The unit is
+        honored (second/minute/hour); it is never silently treated as minutes.
+        """
+        return self.start(duration, unit)
+
+    def set_alarm(self, time: object) -> dict[str, object]:
+        """Wall-clock alarm (distinct from a countdown timer).
+
+        Not implemented yet: the in-process manager only supports countdowns.
+        Raises :class:`NotImplementedError` so callers can report "not wired".
+        """
+        raise NotImplementedError("wall-clock alarms are not wired yet")
+
     def cancel(self) -> dict[str, object]:
         with self._lock:
             state = self._state

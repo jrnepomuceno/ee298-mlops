@@ -127,6 +127,8 @@ def parse_args() -> argparse.Namespace:
                        help="static intent-reply directory")
     audio.add_argument("--ack-wav", default="assets/replies/ack_beep.wav",
                        help="wake acknowledgement WAV")
+    audio.add_argument("--timer-expiry-wav", default="assets/replies/ack_beep.wav",
+                       help="WAV played when a countdown timer expires")
 
     speech = parser.add_argument_group("dynamic speech")
     speech.add_argument("--piper-bin",
@@ -191,12 +193,26 @@ def main() -> int:
     wav_player: WavPlayer | None = None
     piper_tts: PiperTts | None = None
     warmup_timer: threading.Timer | None = None
-    timer_manager = TimerManager(
-        on_expire=lambda state: log(
-            f"[timer] expired id={state.timer_id} duration="
-            f"{state.duration:g} {state.unit}"
-        )
-    )
+    def _on_timer_expire(state) -> None:
+        # Fires from the timer thread, not the mic loop: keep it self-contained
+        # and fail-soft so a missing speaker/TTS never takes the process down.
+        log(f"[timer] expired id={state.timer_id} duration="
+            f"{state.duration:g} {state.unit}")
+        try:
+            if wav_player is not None:
+                wav_player.play(args.timer_expiry_wav)
+        except Exception:  # noqa: BLE001
+            log("[timer] expiry beep failed", exc_info=True)
+        try:
+            if piper_tts is not None:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp_path = tmp.name
+                piper_tts.synthesize("Your timer is up.", tmp_path)
+                wav_player.play(tmp_path)
+        except Exception:  # noqa: BLE001
+            log("[timer] expiry speech failed", exc_info=True)
+
+    timer_manager = TimerManager(on_expire=_on_timer_expire)
     keepalive_enabled = False
     warming = not args.no_warmup
     try:
@@ -214,7 +230,8 @@ def main() -> int:
             rgb.warming(args.warmup_color)
         weather_fn = None if args.no_weather else make_weather_fn(args.weather_location)
         pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True,
-                                  weather_fn=weather_fn)
+                                  weather_fn=weather_fn,
+                                  timer_manager=timer_manager)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,

@@ -152,11 +152,14 @@ def default_orchestrator(*, rgb: Any | None = None,
                          speak: Callable[[str], None] | None = None,
                          on_event: Callable[[Mapping[str, Any]], None] | None = None,
                          dry_run: bool = True,
-                         weather_fn: Callable[[], str] | None = None) -> Orchestrator:
+                         weather_fn: Callable[[], str] | None = None,
+                         timer_manager: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
 
     ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
     ``what_weather`` intent can return a live, spoken-friendly line.
+    ``timer_manager`` (optional) is passed to :class:`TimerExecutor` so the
+    timer intents can schedule / cancel a real in-process timer.
     """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
@@ -166,7 +169,7 @@ def default_orchestrator(*, rgb: Any | None = None,
         "lights": LightExecutor(dry_run),
         "hvac": HvacExecutor(dry_run),
         "media": MediaExecutor(dry_run),
-        "timer": TimerExecutor(dry_run),
+        "timer": TimerExecutor(dry_run, manager=timer_manager),
         "remind": ReminderExecutor(dry_run),
         "comms": CommsExecutor(dry_run),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn),
