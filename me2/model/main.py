@@ -91,6 +91,8 @@ def parse_args() -> argparse.Namespace:
                    help="resume training from a checkpoint")
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--warmup-epochs", type=int, default=0,
+                   help="linear warmup: ramp LR from ~0 to --lr over this many epochs (0 disables)")
     p.add_argument("--weight-decay", type=float, default=1e-4)
     p.add_argument("--max-frames", type=int, default=400,
                    help="max mel frames per utterance (400 = 4s @ 10ms hop)")
@@ -233,6 +235,10 @@ def cmd_train(args) -> None:
 
     end_epoch = start_epoch + args.epochs
     for epoch in range(start_epoch + 1, end_epoch + 1):
+        if args.warmup_epochs > 0:
+            frac = min(1.0, epoch / args.warmup_epochs)
+            for _pg in optimizer.param_groups:
+                _pg["lr"] = args.lr * frac
         t0 = time.time()
         train_m = train_one_epoch(model, train_loader, optimizer, device,
                                   ctc_loss, amp=args.amp)

@@ -57,7 +57,9 @@ CTC_WORDS = [
     "a", "an", "the", "and", "at", "in", "on", "for", "me", "my", "please",
     "set", "turn", "lights", "light", "temperature", "music", "timer",
     "alarm", "remind", "call", "time", "weather", "reminders", "pause",
-    "stop", "cancel", "play", "dim", "what", "are", "is",
+    "stop", "cancel", "play", "dim", "what", "are", "is", "off", "about",
+    "it", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+    "twelve",
     # contact names
     "mom", "dad", "john", "jane", "maria", "carlos",
     # reminder keywords
