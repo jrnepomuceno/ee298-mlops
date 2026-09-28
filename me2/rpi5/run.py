@@ -512,7 +512,11 @@ def main() -> int:
                         wake_only=args.wake_only):
                     if args.wake_only:
                         continue
-                    outcome = machine.handle_command(wav)
+                    # Stamp the command with the interaction's generation so a
+                    # command captured by an overlapping wake is dropped instead
+                    # of firing a second, simultaneous reply.
+                    outcome = machine.handle_command(
+                        wav, generation=machine.current_generation())
                     if outcome is not None:
                         result = current_event.get("result")
                         intent = (result.get("intent", "unknown")

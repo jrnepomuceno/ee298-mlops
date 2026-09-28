@@ -152,6 +152,29 @@ class DryRunSideEffectTests(unittest.TestCase):
         self.assertTrue(result.handled)
         self.assertIn("answer", result.execution.payload)
 
+    def test_weather_live_answer_spoken_even_in_dry_run(self):
+        """Regression: the live mic pipeline runs dry_run=True, but weather is
+        read-only, so a configured provider must still be fetched and spoken.
+        Previously the `and not self.dry_run` gate suppressed it and the user
+        heard the offline fallback line instead of the real weather."""
+        orch = default_orchestrator(
+            dry_run=True, weather_fn=lambda: "It's 25 degrees and cloudy.")
+        req = decode("what_weather", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        self.assertEqual(result.reply_text, "It's 25 degrees and cloudy.")
+        self.assertEqual(result.execution.payload["answer"],
+                         "It's 25 degrees and cloudy.")
+
+    def test_weather_without_provider_keeps_fallback_in_dry_run(self):
+        orch = default_orchestrator(dry_run=True, weather_fn=None)
+        req = decode("what_weather", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        self.assertEqual(
+            result.reply_text,
+            "Weather is not available without a configured source.")
+
 
 class WhatTimeAnswerSourceTests(unittest.TestCase):
     """what_time: the executor's payload['answer'] is the single source of

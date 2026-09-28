@@ -117,6 +117,50 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(rgb.calls, ["wake", "idle"])
         self.assertEqual(calls, ["ack"])
 
+    def test_stale_command_dropped_when_second_wake_arrives(self):
+        """Regression: two intents playing at once.
+
+        The live mic loop stamps each captured command with the interaction's
+        generation (machine.current_generation()). While the first command is
+        mid-flight (slow action, e.g. a live weather lookup) a second wake word
+        lands and bumps the generation. The first command now carries a stale
+        generation and must be DROPPED so the user hears one reply, not two at
+        once. The newest command still processes normally."""
+        machine, rgb, calls = self.make_machine()
+        machine.acknowledge_wake()                      # gen 1, -> LISTENING
+        first_gen = machine.current_generation()
+
+        # Second wake arrives while the first is still resolving: the machine
+        # is pulled back to STANDBY (as the loop would after the first reply)
+        # and a new interaction is acknowledged, bumping the generation.
+        machine.state = State.STANDBY
+        machine.acknowledge_wake()                      # gen 2, -> LISTENING
+        self.assertNotEqual(first_gen, machine.current_generation())
+
+        # The first (stale) command is dropped even though state allows it.
+        self.assertIsNone(machine.handle_command(b"first", generation=first_gen))
+        self.assertNotIn("infer:b'first'", calls)
+        self.assertNotIn("act", calls)
+        self.assertNotIn("reply", calls)
+
+        # The newest command (matching generation) still processes.
+        outcome = machine.handle_command(
+            b"second", generation=machine.current_generation())
+        self.assertIsNotNone(outcome)
+        self.assertIn("infer:b'second'", calls)
+
+    def test_command_accepted_from_standby_after_first_completes(self):
+        """A fresh command is still processed once the prior one has returned
+        the machine to STANDBY (the normal sequential path)."""
+        machine, rgb, calls = self.make_machine()
+        machine.acknowledge_wake()          # -> LISTENING
+        machine.state = State.STANDBY       # simulate first interaction done
+
+        outcome = machine.handle_command(
+            b"next command", generation=machine.current_generation())
+        self.assertIsNotNone(outcome)
+        self.assertIn("infer:b'next command'", calls)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,7 +31,11 @@ class InfoExecutor(Executor):
             answer = datetime.now().strftime("%-I:%M %p")
             detail = f"time is {answer}"
         elif req.action_code == "query.weather":
-            if self.weather_fn is not None and not self.dry_run:
+            # A configured provider is the gate, not dry_run: the weather line
+            # is read-only (no hardware side effect), so it is safe to fetch
+            # even when the pipeline runs dry-run. dry_run only suppresses
+            # *actuating* intents (lights, calls, volume, ...), never an answer.
+            if self.weather_fn is not None:
                 try:
                     answer = self.weather_fn()
                 except Exception as exc:  # noqa: BLE001
