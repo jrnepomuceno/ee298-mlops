@@ -20,6 +20,7 @@ from .replies import build_reply, reply_wav_name
 from .rgb import RgbController
 from .state_machine import HarnessStateMachine
 from .tts import PiperTts, WavPlayer
+from .reminders import ReminderStore
 from .timer import TimerManager
 from .weather import make_weather_fn
 from .wakeword import OpenWakeWordDetector
@@ -145,6 +146,11 @@ def parse_args() -> argparse.Namespace:
     weather.add_argument("--no-weather", action="store_true",
                          help="Disable live weather lookup (use the offline fallback line)")
 
+    reminders = parser.add_argument_group("reminders")
+    reminders.add_argument("--reminders-file", default=None,
+                           help="Path to the reminders JSON file "
+                                "(default: ~/.me2/reminders.json)")
+
     warmup = parser.add_argument_group("warmup")
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
@@ -229,9 +235,11 @@ def main() -> int:
             log("[warming] loading checkpoint and warming model")
             rgb.warming(args.warmup_color)
         weather_fn = None if args.no_weather else make_weather_fn(args.weather_location)
+        reminder_store = ReminderStore(args.reminders_file)
         pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True,
                                   weather_fn=weather_fn,
-                                  timer_manager=timer_manager)
+                                  timer_manager=timer_manager,
+                                  reminder_store=reminder_store)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,

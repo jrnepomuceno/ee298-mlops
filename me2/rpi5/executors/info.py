@@ -40,7 +40,10 @@ class InfoExecutor(Executor):
                 answer = "Weather is not available without a configured source."
             detail = answer
         elif req.action_code == "query.reminders":
-            if self.reminders_fn is not None and not self.dry_run:
+            # Reading reminders is a local, offline operation (no network), so
+            # we answer from the store even in dry-run -- the "action" IS the
+            # list. Without a store attached we fall back to a neutral line.
+            if self.reminders_fn is not None:
                 try:
                     answer = self.reminders_fn()
                 except Exception as exc:  # noqa: BLE001

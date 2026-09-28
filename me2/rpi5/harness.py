@@ -128,9 +128,11 @@ class FacadePipeline:
     def __init__(self, orchestrator: Orchestrator | None = None,
                  *, threshold: float = 0.75, dry_run: bool = True,
                  weather_fn: "Callable[[], str] | None" = None,
-                 timer_manager: Any | None = None) -> None:
+                 timer_manager: Any | None = None,
+                 reminder_store: Any | None = None) -> None:
         self.orchestrator = orchestrator or default_orchestrator(
-            dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager)
+            dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager,
+            reminder_store=reminder_store)
         self.threshold = threshold
         self.dry_run = dry_run
 

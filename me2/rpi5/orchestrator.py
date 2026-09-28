@@ -153,13 +153,16 @@ def default_orchestrator(*, rgb: Any | None = None,
                          on_event: Callable[[Mapping[str, Any]], None] | None = None,
                          dry_run: bool = True,
                          weather_fn: Callable[[], str] | None = None,
-                         timer_manager: Any | None = None) -> Orchestrator:
+                         timer_manager: Any | None = None,
+                         reminder_store: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
 
     ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
     ``what_weather`` intent can return a live, spoken-friendly line.
     ``timer_manager`` (optional) is passed to :class:`TimerExecutor` so the
     timer intents can schedule / cancel a real in-process timer.
+    ``reminder_store`` (optional) is passed to :class:`ReminderExecutor` and
+    :class:`InfoExecutor` so reminders can be persisted and read back.
     """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
@@ -170,8 +173,10 @@ def default_orchestrator(*, rgb: Any | None = None,
         "hvac": HvacExecutor(dry_run),
         "media": MediaExecutor(dry_run),
         "timer": TimerExecutor(dry_run, manager=timer_manager),
-        "remind": ReminderExecutor(dry_run),
+        "remind": ReminderExecutor(dry_run, store=reminder_store),
         "comms": CommsExecutor(dry_run),
-        "info": InfoExecutor(dry_run, weather_fn=weather_fn),
+        "info": InfoExecutor(dry_run, weather_fn=weather_fn,
+                             reminders_fn=(reminder_store.summarize
+                                           if reminder_store is not None else None)),
     }
     return Orchestrator(ex, rgb=rgb, speak=speak, on_event=on_event)
