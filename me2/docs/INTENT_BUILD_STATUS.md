@@ -9,9 +9,9 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 
 | # | Intent | Category | Slots | Status | Notes |
 |---|--------|----------|-------|--------|-------|
-| 1 | `turn_on_lights`  | lights | —          | 🔴 Stub | `_live` → "lights live driver not wired yet". `rgb.py` exists — wire it. |
-| 2 | `turn_off_lights` | lights | —          | 🔴 Stub | same lights driver |
-| 3 | `dim_lights`      | lights | `percent` 1–100 | 🔴 Stub | same lights driver |
+| 1 | `turn_on_lights`  | lights | —          | 🟢 Built | pluggable `LightDriver` (default `HyperxDuoCastDriver` via `quadcastrgb`); `--light-driver` selects device |
+| 2 | `turn_off_lights` | lights | —          | 🟢 Built | same driver; remembers last brightness so a bare "on" restores it |
+| 3 | `dim_lights`      | lights | `percent` 1–100 | 🟢 Built | brightness → colour scaling (ring has no separate brightness channel) |
 | 4 | `set_temperature` | hvac   | `temp` 10–35   | 🔴 Stub | "hvac live driver not wired yet". No relay/controller yet. |
 | 5 | `play_music`      | media  | —          | 🟢 Built | `MediaPlayerController` (needs `--music-dir --live-media`) |
 | 6 | `pause_music`     | media  | —          | 🟢 Built | same controller |
@@ -29,13 +29,13 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 18 | `what_reminders`  | info   | —          | 🟢 Built | reads `ReminderStore` |
 
 ## Scoreboard
-- 🟢 **14 built** — media, volume, timer (countdown + cancel), reminders, info.
+- 🟢 **17 built** — lights, media, volume, timer (countdown + cancel), reminders, info.
 - 🟡 **0 partial**
-- 🔴 **4 not started** — lights (3 intents), hvac (1), call (1).
+- 🔴 **2 not started** — hvac (1), call (1).
 
 ## Recommended build order
 1. ~~`set_alarm`~~ ✅ *built 2026-09-28*
-2. **Lights** — `rgb.py` already in tree; smallest remaining win.
+2. ~~**Lights**~~ ✅ *built 2026-09-28* — pluggable `LightDriver`; HyperX DuoCast default, swappable via `--light-driver`.
 3. **HVAC** — needs a relay/controller backend.
 4. **Call** — last, or leave as graceful stub.
 
@@ -70,6 +70,31 @@ from the wake acknowledgement. Now each has a distinct synthesized tone:
 - **Path gotcha:** the harness `cd`s to `me2/` (see `run_pi5_harness.sh`), so the live
   assets dir is `me2/assets/replies/` — NOT `rpi5/assets/replies/`. Both new files live
   in `me2/assets/replies/`.
+
+### Lights (added 2026-09-28)
+The three light intents are now live via a **pluggable driver layer** in `rgb.py`,
+deliberately separate from the demo-lifecycle `RgbController` (which still drives
+the ring's listening/processing/speaking colours). The ring can wear both hats at
+once; swapping the device behind a voice command never touches the lifecycle
+indicator.
+
+- **`LightDriver`** (abstract) — `on()`, `off()`, `set_brightness(pct)`,
+  `available()`, `close()`. Stateful: remembers the last brightness so a bare
+  "on" restores it.
+- **`HyperxDuoCastDriver`** — default target. Drives the HyperX DuoCast mic ring
+  via the `quadcastrgb` CLI (`solid <RRGGBB>`). The ring has no separate
+  brightness channel, so brightness is expressed by scaling a warm-white colour
+  (`FFF4E6`) toward black. Executable resolves from `$QUADCASTRGB` → `PATH` →
+  `--light-executable`. If the tool is absent it **degrades to a no-op**
+  (`available()==False`) rather than raising, so the assistant answers honestly.
+- **Swapping devices:** subclass `LightDriver`, add one line to the
+  `LIGHT_DRIVERS` registry, select it with `--light-driver NAME`. No code change
+  in the executor or orchestrator. Unknown name → logged + falls back to dry-run.
+- **CLI:** `--light-driver` (default `hyperx-duocast`; empty string = dry-run),
+  `--light-executable PATH`. Wired through `run.py` → `FacadePipeline` →
+  `default_orchestrator(light_driver=...)` → `LightExecutor`.
+- **Tests:** `tests/test_lights.py` (registry, colour scaling, degrade-when-absent,
+  executor on/off/dim + failures, dry-run fallback, full-stack orchestration).
 
 ## Files touched
 | File | Change |

@@ -134,11 +134,12 @@ class FacadePipeline:
                  timer_manager: Any | None = None,
                  reminder_store: Any | None = None,
                  volume_controller: Any | None = None,
-                 media_player: Any | None = None) -> None:
+                 media_player: Any | None = None,
+                 light_driver: Any | None = None) -> None:
         self.orchestrator = orchestrator or default_orchestrator(
             dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager,
             reminder_store=reminder_store, volume_controller=volume_controller,
-            media_player=media_player)
+            media_player=media_player, light_driver=light_driver)
         self.threshold = threshold
         self.dry_run = dry_run
 

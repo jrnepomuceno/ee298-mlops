@@ -17,7 +17,7 @@ from pathlib import Path
 from .audio import VADConfig, microphone_utterances
 from .harness import ACTION_BY_INTENT, DryRunDispatcher, FacadePipeline, HarnessConfig, PiHarness, event_json
 from .replies import build_reply, reply_wav_name
-from .rgb import RgbController
+from .rgb import RgbController, make_light_driver
 from .state_machine import HarnessStateMachine
 from .tts import PiperTts, WavPlayer
 from .reminders import ReminderStore
@@ -172,6 +172,18 @@ def parse_args() -> argparse.Namespace:
                        help="Force a specific audio player binary "
                             "(default: auto-detect ffplay/pw-play/aplay)")
 
+    lights = parser.add_argument_group("lights")
+    lights.add_argument("--light-driver", default="hyperx-duocast",
+                        metavar="NAME",
+                        help="Light device behind the voice commands "
+                             "(turn_on_lights/turn_off_lights/dim_lights). "
+                             "Default: hyperx-duocast (the HyperX DuoCast "
+                             "mic ring light). Pass an empty string to keep "
+                             "lights dry-run.")
+    lights.add_argument("--light-executable", metavar="PATH", default=None,
+                        help="Override the driver's control executable "
+                             "(default: $QUADCASTRGB or 'quadcastrgb' on PATH)")
+
     warmup = parser.add_argument_group("warmup")
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
@@ -256,6 +268,16 @@ def main() -> int:
                           else VolumeController())
     media_player = (MediaPlayerController(args.music_dir, player=args.player)
                      if args.live_media else None)
+    light_driver = make_light_driver(args.light_driver, args.light_executable)
+    if light_driver is not None:
+        if light_driver.available():
+            log(f"[lights] live driver '{light_driver.name}' ready")
+        else:
+            log(f"[lights] driver '{light_driver.name}' selected but its "
+                "executable is not on this host; light commands will report "
+                "unreachable instead of driving hardware")
+    else:
+        log("[lights] no driver selected; light intents stay dry-run")
     keepalive_enabled = False
     warming = not args.no_warmup
     try:
@@ -280,7 +302,8 @@ def main() -> int:
                                   timer_manager=timer_manager,
                                   reminder_store=reminder_store,
                                   volume_controller=volume_controller,
-                                  media_player=media_player)
+                                  media_player=media_player,
+                                  light_driver=light_driver)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,

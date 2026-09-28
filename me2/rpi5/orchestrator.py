@@ -156,7 +156,8 @@ def default_orchestrator(*, rgb: Any | None = None,
                          timer_manager: Any | None = None,
                          reminder_store: Any | None = None,
                          volume_controller: Any | None = None,
-                         media_player: Any | None = None) -> Orchestrator:
+                         media_player: Any | None = None,
+                         light_driver: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
 
     ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
@@ -169,13 +170,16 @@ def default_orchestrator(*, rgb: Any | None = None,
     the volume intents can move the real system output volume.
     ``media_player`` (optional) is passed to :class:`MediaExecutor` so the
     media intents (play/pause/stop) can drive real local playback.
+    ``light_driver`` (optional) is passed to :class:`LightExecutor` so the
+    light intents (on/off/dim) can drive a real device (default target: the
+    HyperX DuoCast ring light).
     """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
         ReminderExecutor, CommsExecutor, InfoExecutor, VolumeExecutor,
     )
     ex = {
-        "lights": LightExecutor(dry_run),
+        "lights": LightExecutor(dry_run, driver=light_driver),
         "hvac": HvacExecutor(dry_run),
         "media": MediaExecutor(dry_run, player=media_player),
         "timer": TimerExecutor(dry_run, manager=timer_manager),
