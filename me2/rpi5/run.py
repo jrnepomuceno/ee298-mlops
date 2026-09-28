@@ -23,6 +23,8 @@ from .tts import PiperTts, WavPlayer
 from .reminders import ReminderStore
 from .timer import TimerManager
 from .weather import make_weather_fn
+from .volume import VolumeController
+from .media import MediaPlayerController
 from .wakeword import OpenWakeWordDetector
 
 
@@ -151,6 +153,23 @@ def parse_args() -> argparse.Namespace:
                            help="Path to the reminders JSON file "
                                 "(default: ~/.me2/reminders.json)")
 
+    volume = parser.add_argument_group("volume")
+    volume.add_argument("--no-volume", action="store_true",
+                        help="Disable live output-volume control (volume_up/"
+                             "volume_down/mute become dry-run only)")
+
+    music = parser.add_argument_group("music")
+    music.add_argument("--music-dir", default=str(Path.home() / "Music"),
+                       help="Directory of audio files for play_music "
+                            "(default: ~/Music)")
+    music.add_argument("--live-media", action="store_true",
+                       help="Enable live music playback (play_music/pause_"
+                            "music/stop_music). Off by default: media intents "
+                            "stay dry-run.")
+    music.add_argument("--player", default=None,
+                       help="Force a specific audio player binary "
+                            "(default: auto-detect ffplay/pw-play/aplay)")
+
     warmup = parser.add_argument_group("warmup")
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
@@ -219,6 +238,10 @@ def main() -> int:
             log("[timer] expiry speech failed", exc_info=True)
 
     timer_manager = TimerManager(on_expire=_on_timer_expire)
+    volume_controller = (None if args.no_volume
+                          else VolumeController())
+    media_player = (MediaPlayerController(args.music_dir, player=args.player)
+                     if args.live_media else None)
     keepalive_enabled = False
     warming = not args.no_warmup
     try:
@@ -236,10 +259,14 @@ def main() -> int:
             rgb.warming(args.warmup_color)
         weather_fn = None if args.no_weather else make_weather_fn(args.weather_location)
         reminder_store = ReminderStore(args.reminders_file)
+        if volume_controller is not None:
+            volume_controller.begin()  # snapshot pre-demo level for restore
         pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True,
                                   weather_fn=weather_fn,
                                   timer_manager=timer_manager,
-                                  reminder_store=reminder_store)
+                                  reminder_store=reminder_store,
+                                  volume_controller=volume_controller,
+                                  media_player=media_player)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,
@@ -450,6 +477,18 @@ def main() -> int:
                     error=True)
         if wav_player is not None:
             wav_player.close()
+        if media_player is not None:
+            try:
+                media_player.stop()
+                log("[shutdown] music stopped")
+            except Exception as exc:  # noqa: BLE001
+                log(f"[shutdown] music stop failed: {exc}", error=True)
+        if volume_controller is not None:
+            try:
+                volume_controller.end()
+                log("[shutdown] output volume restored to pre-demo level")
+            except Exception as exc:  # noqa: BLE001
+                log(f"[shutdown] volume restore failed: {exc}", error=True)
         timer_manager.close()
         rgb.close()
 

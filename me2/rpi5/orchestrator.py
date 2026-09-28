@@ -154,7 +154,9 @@ def default_orchestrator(*, rgb: Any | None = None,
                          dry_run: bool = True,
                          weather_fn: Callable[[], str] | None = None,
                          timer_manager: Any | None = None,
-                         reminder_store: Any | None = None) -> Orchestrator:
+                         reminder_store: Any | None = None,
+                         volume_controller: Any | None = None,
+                         media_player: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
 
     ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
@@ -163,20 +165,25 @@ def default_orchestrator(*, rgb: Any | None = None,
     timer intents can schedule / cancel a real in-process timer.
     ``reminder_store`` (optional) is passed to :class:`ReminderExecutor` and
     :class:`InfoExecutor` so reminders can be persisted and read back.
+    ``volume_controller`` (optional) is passed to :class:`VolumeExecutor` so
+    the volume intents can move the real system output volume.
+    ``media_player`` (optional) is passed to :class:`MediaExecutor` so the
+    media intents (play/pause/stop) can drive real local playback.
     """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
-        ReminderExecutor, CommsExecutor, InfoExecutor,
+        ReminderExecutor, CommsExecutor, InfoExecutor, VolumeExecutor,
     )
     ex = {
         "lights": LightExecutor(dry_run),
         "hvac": HvacExecutor(dry_run),
-        "media": MediaExecutor(dry_run),
+        "media": MediaExecutor(dry_run, player=media_player),
         "timer": TimerExecutor(dry_run, manager=timer_manager),
         "remind": ReminderExecutor(dry_run, store=reminder_store),
         "comms": CommsExecutor(dry_run),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn,
                              reminders_fn=(reminder_store.summarize
                                            if reminder_store is not None else None)),
+        "volume": VolumeExecutor(dry_run, controller=volume_controller),
     }
     return Orchestrator(ex, rgb=rgb, speak=speak, on_event=on_event)

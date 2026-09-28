@@ -15,7 +15,7 @@ FRAME_LENGTH_MS = 25.0        # analysis window
 FRAME_SHIFT_MS = 10.0         # hop size
 
 # ----------------------------------------------------------------- intents --
-# 16 classes: 15 command intents + 1 out-of-vocabulary (OOV) class.
+# 19 classes: 18 command intents + 1 out-of-vocabulary (OOV) class.
 INTENTS = [
     "turn_on_lights",
     "turn_off_lights",
@@ -32,6 +32,9 @@ INTENTS = [
     "what_time",
     "what_weather",
     "what_reminders",
+    "volume_up",
+    "volume_down",
+    "mute",
     "oov",
 ]
 INTENT_TO_ID = {name: i for i, name in enumerate(INTENTS)}

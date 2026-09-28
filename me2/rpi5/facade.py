@@ -125,6 +125,13 @@ INTENT_SPECS: dict[str, dict[str, Any]] = {
     "call":        dict(category="comms", code="call.request",
                         slots=(SlotSpec("contact", "str"),),
                         reply="Calling {contact}."),
+    # --- output volume ---------------------------------------------------- #
+    "volume_up":   dict(category="volume", code="volume.up",
+                        slots=(), reply="Turning the volume up."),
+    "volume_down": dict(category="volume", code="volume.down",
+                        slots=(), reply="Turning the volume down."),
+    "mute":        dict(category="volume", code="volume.mute",
+                        slots=(), reply="Muting the output."),
     # --- information (local / web) --------------------------------------- #
     "what_time":      dict(category="info", code="query.time",
                            slots=(), reply="The time is {now}."),

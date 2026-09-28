@@ -16,9 +16,11 @@ from .timer import TimerExecutor
 from .reminder import ReminderExecutor
 from .comms import CommsExecutor
 from .info import InfoExecutor
+from .volume import VolumeExecutor
 
 __all__ = [
     "ExecutionResult", "Executor",
     "LightExecutor", "HvacExecutor", "MediaExecutor",
     "TimerExecutor", "ReminderExecutor", "CommsExecutor", "InfoExecutor",
+    "VolumeExecutor",
 ]

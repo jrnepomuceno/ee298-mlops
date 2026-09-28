@@ -53,6 +53,9 @@ ACTION_BY_INTENT = {
     "what_time": "query.time",
     "what_weather": "query.weather",
     "what_reminders": "query.reminders",
+    "volume_up": "volume.up",
+    "volume_down": "volume.down",
+    "mute": "volume.mute",
 }
 
 
@@ -129,10 +132,13 @@ class FacadePipeline:
                  *, threshold: float = 0.75, dry_run: bool = True,
                  weather_fn: "Callable[[], str] | None" = None,
                  timer_manager: Any | None = None,
-                 reminder_store: Any | None = None) -> None:
+                 reminder_store: Any | None = None,
+                 volume_controller: Any | None = None,
+                 media_player: Any | None = None) -> None:
         self.orchestrator = orchestrator or default_orchestrator(
             dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager,
-            reminder_store=reminder_store)
+            reminder_store=reminder_store, volume_controller=volume_controller,
+            media_player=media_player)
         self.threshold = threshold
         self.dry_run = dry_run
 
