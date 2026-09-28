@@ -15,7 +15,7 @@ import warnings
 from pathlib import Path
 
 from .audio import VADConfig, microphone_utterances
-from .harness import ACTION_BY_INTENT, DryRunDispatcher, HarnessConfig, PiHarness, event_json
+from .harness import ACTION_BY_INTENT, DryRunDispatcher, FacadePipeline, HarnessConfig, PiHarness, event_json
 from .replies import build_reply, reply_wav_name
 from .rgb import RgbController
 from .state_machine import HarnessStateMachine
@@ -103,6 +103,9 @@ def parse_args() -> argparse.Namespace:
                        help="maximum mel frames per utterance (default: 400)")
     model.add_argument("--min-confidence", type=float, default=0.75,
                        help="minimum intent confidence (default: 0.75)")
+    model.add_argument("--pipeline", choices=["legacy", "facade"], default="facade",
+                       help="execution path: 'facade' (new facade+orchestrator, default) "
+                            "or 'legacy' (original inline DryRunDispatcher)")
 
     audio = parser.add_argument_group("audio")
     audio.add_argument("--no-ack", action="store_true",
@@ -202,6 +205,7 @@ def main() -> int:
         if warming:
             log("[warming] loading checkpoint and warming model")
             rgb.warming(args.warmup_color)
+        pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,
@@ -209,7 +213,7 @@ def main() -> int:
             min_confidence=args.min_confidence,
             warmup=0 if args.no_warmup else 1,
             threads=args.threads,
-        ), dispatcher=DryRunDispatcher(timer_manager))
+        ), dispatcher=DryRunDispatcher(timer_manager), pipeline=pipeline)
         if warming:
             if wav_player is not None:
                 warmup_path = Path(args.warmup_wav)
@@ -284,15 +288,33 @@ def main() -> int:
                         "intent_confidence": 1.0,
                         "slots": slots,
                     }
-                    action = harness.dispatcher.dispatch(result)
+                else:
+                    result = event["result"]
+                if args.pipeline == "facade":
+                    orch_result = harness.pipeline.process(result, source="microphone")
                     event["result"] = result
-                    event["action"] = action
-                    event["reply"] = build_reply(result, action)
+                    event["facade"] = orch_result.event
+                    event["reply"] = {"text": orch_result.reply_text,
+                                      "speak": True, "source": "facade"}
+                    current_event.clear()
+                    current_event.update(event)
+                    return result
+                # legacy path
+                action = harness.dispatcher.dispatch(result)
+                event["result"] = result
+                event["action"] = action
+                event["reply"] = build_reply(result, action)
                 current_event.clear()
                 current_event.update(event)
-                return event["result"]
+                return result
 
             def execute_action(result):
+                if args.pipeline == "facade":
+                    # The facade already executed during infer_command; record
+                    # the outcome for the event log and return a marker.
+                    return {"status": "facade_handled",
+                            "code": "facade",
+                            "detail": "executed by facade+orchestrator"}
                 action = harness.dispatcher.dispatch(result)
                 current_event["action"] = action
                 return action

@@ -33,6 +33,8 @@ from inference.ort_infer import (
 )
 from inference.features import load_wav_mono
 from .replies import build_reply
+from .facade import ActionRequest, RejectResult, decode
+from .orchestrator import Orchestrator, OrchestratorResult, default_orchestrator
 
 
 ACTION_BY_INTENT = {
@@ -114,11 +116,36 @@ class DryRunDispatcher:
         }
 
 
+class FacadePipeline:
+    """Facade + orchestrator wired together as the new execution path.
+
+    Replaces the inline gate/slot logic in :class:`DryRunDispatcher` with the
+    pure :func:`~rpi5.facade.decode` + :class:`~rpi5.orchestrator.Orchestrator`.
+    The model still emits only (intent, slots, confidence); everything from the
+    confidence gate onward lives here.
+    """
+
+    def __init__(self, orchestrator: Orchestrator | None = None,
+                 *, threshold: float = 0.75, dry_run: bool = True) -> None:
+        self.orchestrator = orchestrator or default_orchestrator(dry_run=dry_run)
+        self.threshold = threshold
+        self.dry_run = dry_run
+
+    def process(self, result: dict[str, Any], source: str = "microphone") -> OrchestratorResult:
+        intent = result.get("intent", "oov")
+        confidence = float(result.get("intent_confidence", 0.0))
+        slots = result.get("slots") or {}
+        decoded = decode(intent, slots, confidence,
+                         threshold=self.threshold, dry_run=self.dry_run)
+        return self.orchestrator.run(decoded, source=source)
+
+
 class PiHarness:
     """Load the VCM (ONNX) once and process replayed WAVs or self-tests."""
 
     def __init__(self, config: HarnessConfig,
-                 dispatcher: DryRunDispatcher | None = None) -> None:
+                 dispatcher: DryRunDispatcher | None = None,
+                 pipeline: FacadePipeline | None = None) -> None:
         self.config = config
         self.device = "cpu"  # ONNX Runtime CPU execution provider
         checkpoint = resolve_checkpoint(config.checkpoint)
@@ -128,6 +155,7 @@ class PiHarness:
         self.session, self._in_name, self.intents, self.ctc_vocab = load_session(
             str(checkpoint), config.threads)
         self.dispatcher = dispatcher or DryRunDispatcher()
+        self.pipeline = pipeline or FacadePipeline(threshold=config.min_confidence)
         self._warmup()
 
     def _warmup(self) -> None:
@@ -150,6 +178,13 @@ class PiHarness:
             self.ctc_vocab,
         )
         return self._event(source, result)
+
+    def recognize_and_act(self, wav: Any, source: str = "microphone") -> OrchestratorResult:
+        """Recognize + run the full facade/orchestrator pipeline in one call."""
+        wav = np.asarray(wav, dtype=np.float32).ravel()
+        result = run_utterance(self.session, wav, self.config.max_frames,
+                               self.intents, self.ctc_vocab)
+        return self.pipeline.process(result, source=source)
 
     def recognize_self_test(self) -> list[dict[str, Any]]:
         events = []
