@@ -23,3 +23,7 @@ me2/**/venv/
 
 # macOS
 .DS_Store
+
+# ME2 runtime data / TTS history (generated at runtime, not source)
+me2/checkpoints_tts/
+me2/data/
