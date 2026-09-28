@@ -64,14 +64,23 @@ class TimerExecutor(Executor):
                                        side_effects=True,
                                        payload={"answer": _spoken_set(duration, unit)})
             elif req.action_code == "alarm.set":
-                # Wall-clock alarm: not wired yet. Acknowledge gracefully (like the
-                # weather fallback) rather than failing soft, so the user hears the
-                # honest reason instead of a generic apology.
-                return ExecutionResult(ok=True, intent=req.intent, category=self.category,
+                # Wall-clock alarm: schedule on the manager and confirm the
+                # canonical time back to the user.
+                raw_time = req.slots.get("time")
+                try:
+                    res = mgr.set_alarm(raw_time)
+                except ValueError as exc:
+                    return ExecutionResult(ok=False, intent=req.intent,
+                                           category=self.category,
+                                           action_code=req.action_code,
+                                           detail=f"invalid alarm time: {exc}",
+                                           side_effects=False)
+                return ExecutionResult(ok=True, intent=req.intent,
+                                       category=self.category,
                                        action_code=req.action_code,
-                                       detail="alarms are not wired yet",
-                                       side_effects=False,
-                                       payload={"answer": "Alarms aren't available yet."})
+                                       detail=f"alarm live: {res['time']}",
+                                       side_effects=True,
+                                       payload={"answer": f"Alarm set for {res['time']}."})
             elif req.action_code == "timer.cancel":
                 res = mgr.cancel()
                 cancelled = res.get("side_effects")

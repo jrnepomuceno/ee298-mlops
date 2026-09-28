@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 import unittest
+from datetime import timedelta
 
 from rpi5.facade import decode
 from rpi5.timer import TimerManager
@@ -49,6 +50,14 @@ class RecordingManager:
         had = self.last is not None
         return {"status": "executed" if had else "rejected",
                 "side_effects": bool(had)}
+
+    def set_alarm(self, time, now=None):
+        from rpi5.timer import parse_alarm_time
+        h, m = parse_alarm_time(time)
+        self.alarm_time = f"{h:02d}:{m:02d}"
+        self.alarm_calls = getattr(self, "alarm_calls", 0) + 1
+        return {"status": "executed", "action": "alarm.set",
+                "time": self.alarm_time, "side_effects": True}
 
 
 class SpokenSetFormatTests(unittest.TestCase):
@@ -170,30 +179,103 @@ class TimerFallbackTests(unittest.TestCase):
         self.assertFalse(res.side_effects)
 
 
-class AlarmStubTests(unittest.TestCase):
-    def test_alarm_reports_not_wired(self):
+class AlarmSetTests(unittest.TestCase):
+    """Wall-clock alarms: the executor schedules and confirms the time."""
+
+    def test_alarm_sets_and_confirms(self):
         mgr = RecordingManager()
         ex = TimerExecutor(dry_run=False, manager=mgr)
         req = decode("set_alarm", {"time": "07:00"}, 0.99, dry_run=False)
         res = ex.run(req)
-        # Graceful ack (like the weather fallback): recognized, no side effect,
-        # and the honest reason is what gets spoken.
         self.assertTrue(res.ok)
-        self.assertIn("not wired", res.detail)
-        self.assertFalse(res.side_effects)
-        self.assertEqual(res.payload.get("answer"), "Alarms aren't available yet.")
+        self.assertTrue(res.side_effects)
+        self.assertEqual(mgr.alarm_time, "07:00")
+        self.assertEqual(res.payload.get("answer"), "Alarm set for 07:00.")
 
-    def test_alarm_spoken_via_orchestrator(self):
+    def test_alarm_ampm_normalized(self):
         mgr = RecordingManager()
-        orch = default_orchestrator(dry_run=False, timer_manager=mgr)
-        req = decode("set_alarm", {"time": "07:00"}, 0.99, dry_run=False)
-        result = orch.run(req)
-        self.assertEqual(result.reply_text, "Alarms aren't available yet.")
+        ex = TimerExecutor(dry_run=False, manager=mgr)
+        req = decode("set_alarm", {"time": "7:00 PM"}, 0.99, dry_run=False)
+        res = ex.run(req)
+        self.assertTrue(res.ok)
+        self.assertEqual(mgr.alarm_time, "19:00")
+        self.assertEqual(res.payload.get("answer"), "Alarm set for 19:00.")
 
-    def test_manager_set_alarm_raises_not_implemented(self):
+    def test_alarm_invalid_time_fails_soft(self):
+        mgr = RecordingManager()
+        ex = TimerExecutor(dry_run=False, manager=mgr)
+        req = decode("set_alarm", {"time": "25:00"}, 0.99, dry_run=False)
+        res = ex.run(req)
+        self.assertFalse(res.ok)
+        self.assertIn("invalid alarm time", res.detail)
+        self.assertFalse(res.side_effects)
+
+    def test_alarm_no_manager_fails(self):
+        ex = TimerExecutor(dry_run=False, manager=None)
+        req = decode("set_alarm", {"time": "07:00"}, 0.99, dry_run=False)
+        res = ex.run(req)
+        self.assertFalse(res.ok)
+        self.assertIn("no TimerManager", res.detail)
+
+
+class AlarmManagerTests(unittest.TestCase):
+    """The real TimerManager schedules a wall-clock alarm and rolls forward."""
+
+    def test_parse_alarm_time_forms(self):
+        from rpi5.timer import parse_alarm_time
+        self.assertEqual(parse_alarm_time("07:00"), (7, 0))
+        self.assertEqual(parse_alarm_time("7:00 PM"), (19, 0))
+        self.assertEqual(parse_alarm_time("12:00 AM"), (0, 0))
+        self.assertEqual(parse_alarm_time("12:30 PM"), (12, 30))
+        self.assertEqual(parse_alarm_time("9"), (9, 0))
+        for bad in ("", "25:00", "12:60", "abc"):
+            with self.assertRaises(ValueError):
+                parse_alarm_time(bad)
+
+    def test_alarm_schedules_at_next_occurrence(self):
+        from datetime import datetime
         mgr = TimerManager()
-        with self.assertRaises(NotImplementedError):
-            mgr.set_alarm("07:00")
+        # 1 minute from now, expressed as a wall-clock time (alarms are
+        # minute-resolution, so a 1-minute lead gives a 60s delay).
+        now = datetime(2026, 9, 28, 12, 0, 0)
+        target = (now + timedelta(minutes=1)).strftime("%H:%M")
+        res = mgr.set_alarm(target, now=now)
+        self.assertEqual(res["delay_seconds"], 60.0)
+        self.assertEqual(res["time"], "12:01")
+        self.assertEqual(res["fires_at"], "2026-09-28T12:01:00")
+        self.assertIsNotNone(mgr._alarm_state)
+        mgr.close()
+
+    def test_alarm_rolls_forward_when_past(self):
+        from datetime import datetime
+        mgr = TimerManager()
+        now = datetime(2026, 9, 28, 22, 0, 0)  # 10pm
+        res = mgr.set_alarm("07:00", now=now)  # 7am already passed today
+        self.assertEqual(res["time"], "07:00")
+        # Should fire tomorrow morning (~9 hours away), not immediately.
+        self.assertGreater(res["delay_seconds"], 8 * 3600)
+        self.assertLess(res["delay_seconds"], 10 * 3600)
+        mgr.close()
+
+    def test_alarm_independent_of_timer(self):
+        from datetime import datetime
+        mgr = TimerManager()
+        now = datetime(2026, 9, 28, 12, 0, 0)
+        mgr.set_alarm("12:01", now=now)
+        # Cancelling the countdown timer must not clear the alarm.
+        mgr.cancel()
+        self.assertIsNotNone(mgr._alarm_state)
+        mgr.close()
+
+    def test_cancel_alarm_clears_it(self):
+        from datetime import datetime
+        mgr = TimerManager()
+        now = datetime(2026, 9, 28, 12, 0, 0)
+        mgr.set_alarm("12:01", now=now)
+        res = mgr.cancel_alarm()
+        self.assertEqual(res["status"], "executed")
+        self.assertIsNone(mgr._alarm_state)
+        mgr.close()
 
 
 class TimerExpiryTests(unittest.TestCase):

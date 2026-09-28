@@ -130,8 +130,10 @@ def parse_args() -> argparse.Namespace:
                        help="static intent-reply directory")
     audio.add_argument("--ack-wav", default="assets/replies/ack_beep.wav",
                        help="wake acknowledgement WAV")
-    audio.add_argument("--timer-expiry-wav", default="assets/replies/ack_beep.wav",
+    audio.add_argument("--timer-expiry-wav", default="assets/replies/timer_ding.wav",
                        help="WAV played when a countdown timer expires")
+    audio.add_argument("--alarm-expiry-wav", default="assets/replies/alarm_ring.wav",
+                       help="WAV played when a wall-clock alarm rings")
 
     speech = parser.add_argument_group("dynamic speech")
     speech.add_argument("--piper-bin",
@@ -221,21 +223,33 @@ def main() -> int:
     def _on_timer_expire(state) -> None:
         # Fires from the timer thread, not the mic loop: keep it self-contained
         # and fail-soft so a missing speaker/TTS never takes the process down.
-        log(f"[timer] expired id={state.timer_id} duration="
-            f"{state.duration:g} {state.unit}")
+        # A countdown timer and a wall-clock alarm both land here; branch on the
+        # state type to pick the right WAV and spoken line.
+        from .timer import AlarmState
+        if isinstance(state, AlarmState):
+            kind = "alarm"
+            log(f"[alarm] ringing id={state.alarm_id} time={state.time}")
+            wav_path = args.alarm_expiry_wav
+            speech_text = f"It's {state.time}."
+        else:
+            kind = "timer"
+            log(f"[timer] expired id={state.timer_id} duration="
+                f"{state.duration:g} {state.unit}")
+            wav_path = args.timer_expiry_wav
+            speech_text = "Your timer is up."
         try:
             if wav_player is not None:
-                wav_player.play(args.timer_expiry_wav)
+                wav_player.play(wav_path)
         except Exception:  # noqa: BLE001
-            log("[timer] expiry beep failed", exc_info=True)
+            log(f"[{kind}] expiry beep failed", exc_info=True)
         try:
             if piper_tts is not None:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                     tmp_path = tmp.name
-                piper_tts.synthesize("Your timer is up.", tmp_path)
+                piper_tts.synthesize(speech_text, tmp_path)
                 wav_player.play(tmp_path)
         except Exception:  # noqa: BLE001
-            log("[timer] expiry speech failed", exc_info=True)
+            log(f"[{kind}] expiry speech failed", exc_info=True)
 
     timer_manager = TimerManager(on_expire=_on_timer_expire)
     volume_controller = (None if args.no_volume
