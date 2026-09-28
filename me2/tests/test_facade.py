@@ -153,5 +153,42 @@ class DryRunSideEffectTests(unittest.TestCase):
         self.assertIn("answer", result.execution.payload)
 
 
+class WhatTimeAnswerSourceTests(unittest.TestCase):
+    """what_time: the executor's payload['answer'] is the single source of
+    truth for what gets spoken, and the time string is portable."""
+
+    def test_spoken_reply_equals_executor_answer(self):
+        orch = default_orchestrator(dry_run=True)
+        req = decode("what_time", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        answer = result.execution.payload["answer"]
+        self.assertEqual(result.reply_text, answer)
+        self.assertEqual(result.event["reply"], answer)
+
+    def test_time_string_is_portable_no_literal_percent(self):
+        from rpi5.facade import _local_time_text
+        t = _local_time_text()
+        self.assertNotIn("%", t)          # no un-rendered %-I / %M / %p
+        self.assertRegex(t, r"^\d{1,2}:\d{2} (AM|PM)$")
+
+    def test_divergent_live_answer_overrides_template(self):
+        """A live provider returning a value different from the static
+        template must be the one spoken (future-proofs weather/reminders)."""
+        # Simulate a live weather/time provider with a different value.
+        class FakeProvider:
+            def run(self, req):
+                return ExecutionResult(
+                    ok=True, intent=req.intent, category=req.category,
+                    action_code=req.action_code, detail="synced",
+                    side_effects=False, payload={"answer": "12:00 PM"})
+
+        orch = Orchestrator({"info": FakeProvider()})
+        req = decode("what_time", {}, 0.9)
+        result = orch.run(req)
+        self.assertTrue(result.handled)
+        self.assertEqual(result.reply_text, "12:00 PM")
+
+
 if __name__ == "__main__":
     unittest.main()

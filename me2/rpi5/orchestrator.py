@@ -105,7 +105,16 @@ class Orchestrator:
                 err = ExecutionResult(ok=False, intent=req.intent, category=req.category,
                                       action_code=req.action_code,
                                       detail=f"executor error: {exc}", side_effects=False)
-            reply = req.reply_text if err.ok else "Sorry, that didn't work."
+            # Query-style intents (time, weather, reminders) put the
+            # authoritative value in payload["answer"]; the executor is the
+            # single source of truth, so prefer it over the facade's static
+            # template. Command intents carry no "answer", so they keep the
+            # template.
+            if err.ok:
+                answer = (err.payload or {}).get("answer")
+                reply = str(answer) if answer else req.reply_text
+            else:
+                reply = "Sorry, that didn't work."
         self._speak(reply)
         self._rgb("speaking", "idle")
         event = self._event(source, intent=req.intent, status=("acted" if err.ok else "error"),

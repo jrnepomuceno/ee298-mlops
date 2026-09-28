@@ -220,7 +220,14 @@ def _render(template: str | Any, slots: Mapping[str, Any], intent: str) -> str:
 
 
 def _local_time_text() -> str:
-    return datetime.now().strftime("%-I:%M %p")
+    """Local wall-clock time as ``H:MM AM/PM`` (12-hour, no leading zero).
+
+    Uses ``%I`` + manual strip instead of glibc-only ``%-I`` so the string is
+    identical on the Pi (musl/glibc) and on any dev box.
+    """
+    now = datetime.now()
+    hour12 = now.hour % 12 or 12
+    return f"{hour12}:{now.strftime('%M')} {now.strftime('%p')}"
 
 
 # --------------------------------------------------------------------------- #
