@@ -157,7 +157,8 @@ def default_orchestrator(*, rgb: Any | None = None,
                          reminder_store: Any | None = None,
                          volume_controller: Any | None = None,
                          media_player: Any | None = None,
-                         light_driver: Any | None = None) -> Orchestrator:
+                         light_driver: Any | None = None,
+                         dialer: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
 
     ``weather_fn`` (optional) is passed to :class:`InfoExecutor` so the
@@ -173,6 +174,8 @@ def default_orchestrator(*, rgb: Any | None = None,
     ``light_driver`` (optional) is passed to :class:`LightExecutor` so the
     light intents (on/off/dim) can drive a real device (default target: the
     HyperX DuoCast ring light).
+    ``dialer`` (optional) is passed to :class:`CommsExecutor` so the
+    ``call`` intent can place a real SIP call (default target: baresip).
     """
     from .executors import (
         LightExecutor, HvacExecutor, MediaExecutor, TimerExecutor,
@@ -184,7 +187,7 @@ def default_orchestrator(*, rgb: Any | None = None,
         "media": MediaExecutor(dry_run, player=media_player),
         "timer": TimerExecutor(dry_run, manager=timer_manager),
         "remind": ReminderExecutor(dry_run, store=reminder_store),
-        "comms": CommsExecutor(dry_run),
+        "comms": CommsExecutor(dry_run, dialer=dialer),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn,
                              reminders_fn=(reminder_store.summarize
                                            if reminder_store is not None else None)),

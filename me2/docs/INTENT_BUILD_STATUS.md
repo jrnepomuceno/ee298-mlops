@@ -20,7 +20,7 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 9 | `set_alarm`       | timer  | `time` str   | 🟢 Built | wall-clock alarm; self-contained ring, roll-forward, single-shot (see notes below) |
 | 10 | `stop_timer`      | timer  | —          | 🟢 Built | cancel path |
 | 11 | `remind`          | remind | `note` str   | 🟢 Built | `ReminderStore` (persists to file) |
-| 12 | `call`            | comms  | `contact` str| 🔴 Stub | no dialer attached; graceful "no dialer" |
+| 12 | `call`            | comms  | `contact` str| 🟢 Built | pluggable `Dialer` (default `BaresipDialer`); `--dialer` selects device; target validated against a safe SIP charset (see notes below) |
 | 13 | `volume_up`       | volume | —          | 🟢 Built | `VolumeController` (keep `--no-volume` off) |
 | 14 | `volume_down`     | volume | —          | 🟢 Built | same controller |
 | 15 | `mute`            | volume | —          | 🟢 Built | same controller |
@@ -29,15 +29,15 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 18 | `what_reminders`  | info   | —          | 🟢 Built | reads `ReminderStore` |
 
 ## Scoreboard
-- 🟢 **18 built** — lights, hvac (audio-only set-point), media, volume, timer (countdown + cancel), reminders, info.
+- 🟢 **19 built** — lights, hvac (audio-only set-point), media, volume, timer (countdown + cancel), reminders, info, call (baresip).
 - 🟡 **0 partial**
-- 🔴 **1 not started** — call (1).
+- 🔴 **0 not started** — all 19 intents built.
 
 ## Recommended build order
 1. ~~`set_alarm`~~ ✅ *built 2026-09-28*
 2. ~~**Lights**~~ ✅ *built 2026-09-28* — pluggable `LightDriver`; HyperX DuoCast default, swappable via `--light-driver`.
 3. ~~**HVAC**~~ ✅ *built 2026-09-28* — audio-only set-point; confirms by voice, structured `payload` ready for a future controller.
-4. **Call** — last, or leave as graceful stub.
+4. ~~**Call**~~ ✅ *built 2026-09-28* — pluggable `Dialer`; baresip default, swappable via `--dialer`; SIP-target charset guard.
 
 ---
 
@@ -116,6 +116,30 @@ is touched — the "side effect" is the spoken confirmation plus a structured
   and flip `side_effects=True`. The slot and payload are already shaped for it.
 - **Tests:** `tests/test_hvac.py` (facade gate, executor valid/edges/unsupported/
   defensive-bad-slot, dry-run fallback, full-stack orchestration).
+
+### `call` — built 2026-09-28
+- **Pluggable `Dialer`** (`rpi5/calls.py`): `dial(target)` / `cancel()` /
+  `available()` / `close()`. Default is `BaresipDialer`; `--dialer NAME` selects
+  the device (same registry pattern as the light drivers — a new dial device is
+  one subclass + one `DIALERS` line, never an executor edit).
+- **baresip is a daemon, not a one-shot CLI.** The dialer starts it lazily on the
+  first call (`baresip [--config CFG] [--account ADDR]`), keeps its stdin open,
+  and places each call by writing `dial <target>\n` to that stdin. The daemon is
+  reused for subsequent calls and torn down by `close()`.
+- **CLI:** `--dialer` (default `baresip`, `""` = dry-run), `--baresip-config`
+  (profile file → `--config`), `--baresip-account` (pin an account → `--account`),
+  `--baresip-bin` (override binary; else `$BARESIP` or `baresip` on PATH).
+- **SIP-target guard** (`normalize_target`): strips whitespace and enforces the
+  charset `^[+\d*#,]{1,32}$` before anything is written to the daemon, so a stray
+  transcript can't inject commands into baresip's stdin.
+- **Fail-soft:** no dialer / binary absent / bad contact → spoken apology, no
+  crash. `side_effects=True` only when a real dial command was issued.
+- **Not covered:** a `call.cancel` path exists in the executor but has no
+  intent/spec yet (no "hang up" intent in the model vocab). Add one to
+  `INTENT_SPECS` if you want a voice hang-up.
+- **Tests:** `tests/test_calls.py` (normalize/charset guard, registry/factory,
+  daemon start + `dial`/`cancel` stdin lines, degrade-when-absent, executor
+  mapping + fail-soft, dry-run, full-stack orchestration).
 
 ## Files touched
 | File | Change |

@@ -18,6 +18,7 @@ from .audio import VADConfig, microphone_utterances
 from .harness import ACTION_BY_INTENT, DryRunDispatcher, FacadePipeline, HarnessConfig, PiHarness, event_json
 from .replies import build_reply, reply_wav_name
 from .rgb import RgbController, make_light_driver
+from .calls import make_dialer
 from .state_machine import HarnessStateMachine
 from .tts import PiperTts, WavPlayer
 from .reminders import ReminderStore
@@ -184,6 +185,24 @@ def parse_args() -> argparse.Namespace:
                         help="Override the driver's control executable "
                              "(default: $QUADCASTRGB or 'quadcastrgb' on PATH)")
 
+    calls = parser.add_argument_group("calls")
+    calls.add_argument("--dialer", default="baresip",
+                       metavar="NAME",
+                       help="Dial device behind the call intent. "
+                            "Default: baresip (SIP softphone). "
+                            "Pass an empty string to keep calls dry-run.")
+    calls.add_argument("--baresip-config", metavar="PATH", default=None,
+                       help="baresip config/profile file (accounts, transports, "
+                            "audio). Passed as '--config' to the daemon. "
+                            "Default: baresip's own default profile.")
+    calls.add_argument("--baresip-account", metavar="ADDR", default=None,
+                       help="Pin which registered baresip account dials "
+                            "(used when the profile has several accounts). "
+                            "Passed as '--account'.")
+    calls.add_argument("--baresip-bin", metavar="PATH", default=None,
+                       help="Override the baresip executable "
+                            "(default: $BARESIP or 'baresip' on PATH)")
+
     warmup = parser.add_argument_group("warmup")
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
@@ -278,6 +297,19 @@ def main() -> int:
                 "unreachable instead of driving hardware")
     else:
         log("[lights] no driver selected; light intents stay dry-run")
+
+    dialer = make_dialer(args.dialer, executable=args.baresip_bin,
+                         config=args.baresip_config,
+                         account=args.baresip_account)
+    if dialer is not None:
+        if dialer.available():
+            log(f"[calls] live dialer '{dialer.name}' ready")
+        else:
+            log(f"[calls] dialer '{dialer.name}' selected but its "
+                "executable is not on this host; call commands will report "
+                "unreachable instead of placing calls")
+    else:
+        log("[calls] no dialer selected; call intent stays dry-run")
     keepalive_enabled = False
     warming = not args.no_warmup
     try:
@@ -303,7 +335,8 @@ def main() -> int:
                                   reminder_store=reminder_store,
                                   volume_controller=volume_controller,
                                   media_player=media_player,
-                                  light_driver=light_driver)
+                                  light_driver=light_driver,
+                                  dialer=dialer)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             device=args.device,
