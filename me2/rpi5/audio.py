@@ -103,6 +103,7 @@ def microphone_utterances(config: VADConfig | None = None,
                           on_speech: Any | None = None,
                           on_timeout: Any | None = None,
                           tts_active: Any | None = None,
+                          post_reply_gate: Any | None = None,
                           cooldown_s: float = 1.5,
                           command_timeout_s: float = 7.0,
                           wake_only: bool = False) -> Iterator[np.ndarray]:
@@ -117,6 +118,15 @@ def microphone_utterances(config: VADConfig | None = None,
     wake-word detector can latch onto our own voice. This is the real echo
     guard -- it stops a spoken reply from being recognised as a second command
     (the cause of the spurious "could you repeat it?" and double replies).
+
+    ``post_reply_gate`` is a second, time-based closure. Even after playback
+    ends and ``tts_active`` clears, the room keeps echoing the reply for a
+    couple of seconds; that lingering echo is what re-latches the wake detector
+    into a phantom wake ("Alexa detected" with no user speech) followed by an
+    out-of-vocabulary reply. While ``post_reply_gate()`` returns True the mic
+    stays closed and frames are dropped, so the trailing echo cannot trigger a
+    second interaction. The caller arms this window for a few seconds after
+    every reply (including the OOV reply), which breaks the echo loop.
     """
     vad = EnergyVAD(config)
     wakeword_active = wakeword is None
@@ -153,14 +163,26 @@ def microphone_utterances(config: VADConfig | None = None,
 
     with capture_context:
         while True:
-            frame = get_frame()
             # Echo guard: while the assistant is producing audio (TTS reply,
-            # alarm, timer ding) the mic is effectively closed. Drop the frame
-            # before the VAD / wake-word detector can latch onto our own voice.
-            # This is what prevents a spoken reply from being recognised as a
-            # second command ("could you repeat it?" + double reply).
+            # alarm, timer ding) the mic is effectively closed. Consume the
+            # frame (so the capture buffer does not back up) but discard it
+            # before the VAD / wake-word detector can latch onto our own
+            # voice. This is what prevents a spoken reply from being
+            # recognised as a second command ("could you repeat it?" +
+            # double reply).
             if tts_active is not None and tts_active():
+                get_frame()
                 continue
+            # Post-reply echo guard: after a reply finishes, hold the mic
+            # closed for a short window so the room's lingering echo of that
+            # reply cannot re-latch the wake detector (phantom wake + OOV).
+            # The frame is still consumed (so the capture buffer does not
+            # back up) but is discarded before the VAD / wake detector can
+            # see it -- exactly like the TTS guard above.
+            if post_reply_gate is not None and post_reply_gate():
+                get_frame()
+                continue
+            frame = get_frame()
             if not wakeword_active:
                 if not wakeword.accepts(frame):
                     continue

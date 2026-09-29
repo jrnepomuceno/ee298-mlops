@@ -76,7 +76,8 @@ class _FakeStream:
         self._stop.set()
 
 
-def _drive(tts_active, frames, expect_utterances: int, timeout_s: float = 5.0):
+def _drive(tts_active, frames, expect_utterances: int, timeout_s: float = 5.0,
+           post_reply_gate=None):
     """Run microphone_utterances in a daemon thread; collect utterances.
 
     ``expect_utterances == 0`` asserts the guard dropped everything (waits the
@@ -96,6 +97,7 @@ def _drive(tts_active, frames, expect_utterances: int, timeout_s: float = 5.0):
                         config=VADConfig(),
                         wakeword=None,          # no wake word -> always listening
                         tts_active=tts_active,
+                        post_reply_gate=post_reply_gate,
                         command_timeout_s=7.0):
                     out.put(utt)
             except Exception:  # noqa: BLE001 - daemon; surface nothing
@@ -159,6 +161,64 @@ class TtsEchoGuardTests(unittest.TestCase):
 
         self.assertEqual(len(got), 1,
                          "the pre-TTS utterance must still be captured")
+
+
+class PostReplyGateTests(unittest.TestCase):
+    """Regression tests for the post-reply echo guard.
+
+    After a reply finishes, ``tts_active`` clears but the room keeps
+    echoing the reply for a couple of seconds. That lingering echo is what
+    re-latches the wake detector into a phantom wake ("Alexa detected"
+    with no user speech) followed by an out-of-vocabulary reply. The
+    post-reply gate holds the mic closed for a short window after every
+    reply so the trailing echo cannot trigger a second interaction.
+
+    The gate is driven by a *frame counter*, not wall-clock time: the fake
+    capture stream is unbounded and drains in microseconds, so a fixed
+    sleep would outpace it. Counting frames makes the test deterministic
+    while still exercising the real gate path in the capture loop.
+    """
+
+    def test_frames_dropped_while_post_reply_gate_active(self):
+        """Loud frames arriving while the post-reply gate is armed must
+        never be captured into an utterance -- the mic stays closed even
+        though tts_active is already cleared."""
+        loud = _speech_then_gap()
+        tts_flag = threading.Event()            # not set -> tts_active False
+        gate = threading.Event()
+        gate.set()                              # post-reply window armed
+
+        got = _drive(tts_flag.is_set, loud, expect_utterances=0, timeout_s=1.5,
+                     post_reply_gate=gate.is_set)
+
+        self.assertEqual(got, [],
+                         "lingering echo during the post-reply guard must be "
+                         "dropped, not re-recognised as a second command")
+
+    def test_frames_captured_after_post_reply_gate_expires(self):
+        """Once the gate releases the mic reopens and the loud frames DO
+        form an utterance, proving the gate (not the silence) is what
+        suppressed them."""
+        # Silent lead-in (VAD idle while the gate is armed), then a loud
+        # phase, then a silence gap that closes the utterance.
+        frames = ([_frame(0.0) for _ in range(20)]
+                  + [_frame(0.2) for _ in range(30)]
+                  + [_frame(0.0) for _ in range(20)])
+        tts_flag = threading.Event()            # not set -> tts_active False
+        # Arm the gate for the first 25 frames (covering the silent
+        # lead-in and the start of the loud phase), then release it so the
+        # remaining loud frames reach the VAD and form an utterance.
+        counter = {"n": 0}
+
+        def gate():
+            counter["n"] += 1
+            return counter["n"] <= 25
+
+        got = _drive(tts_flag.is_set, frames, expect_utterances=1, timeout_s=4.0,
+                     post_reply_gate=gate)
+
+        self.assertEqual(len(got), 1,
+                         "after the guard releases the loud frames should be captured")
 
 
 if __name__ == "__main__":

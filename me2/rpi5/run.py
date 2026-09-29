@@ -121,6 +121,11 @@ def parse_args() -> argparse.Namespace:
     audio = parser.add_argument_group("audio")
     audio.add_argument("--no-ack", action="store_true",
                        help="skip wake acknowledgement playback")
+    audio.add_argument("--post-reply-guard", type=float, default=4.0,
+                       metavar="SECONDS",
+                       help="keep the microphone closed this long after a "
+                            "reply finishes, so the trailing room echo cannot "
+                            "re-latch the wake detector (default: 4.0)")
     audio.add_argument("--wakeword", metavar="NAME",
                        help="pretrained wake-word model, e.g. alexa")
     audio.add_argument("--wakeword-threshold", type=float, default=0.7,
@@ -442,6 +447,15 @@ def main() -> int:
             # while it is set. This is the echo guard that stops a spoken reply
             # from being recognised as a second command.
             tts_active = threading.Event()
+            # Monotonic deadline until which the microphone stays closed after
+            # a reply finishes. The 300 ms tail inside _ducked_play absorbs
+            # speaker ring-down, but the *room* keeps echoing the reply for a
+            # couple of seconds; that lingering echo is what re-latches the
+            # wake detector and produces the phantom "Alexa detected" + OOV
+            # reply. Holding the mic closed for post_reply_guard_s after every
+            # reply (including the OOV reply itself) kills that loop.
+            post_reply_guard_s = max(0.0, args.post_reply_guard)
+            post_reply_until = 0.0
 
             if args.vcm_only:
                 rgb.wake()
@@ -527,6 +541,14 @@ def main() -> int:
                     # settle without noticeably delaying the next interaction.
                     time.sleep(0.3)
                     tts_active.clear()
+                    # Post-reply guard: the room keeps echoing the reply for a
+                    # couple of seconds after the speaker settles. Hold the mic
+                    # closed for post_reply_guard_s more so that lingering echo
+                    # cannot re-latch the wake detector (the phantom "Alexa
+                    # detected" + OOV reply). Applies to every reply, including
+                    # the OOV reply itself, which breaks the echo loop.
+                    if post_reply_guard_s > 0:
+                        post_reply_until = time.monotonic() + post_reply_guard_s
 
             def play_reply(result, action):
                 # Dynamic (Piper TTS) intents: the spoken value is computed at
@@ -646,6 +668,7 @@ def main() -> int:
                         on_speech=rgb.wake,
                         on_timeout=machine.cancel_listening,
                         tts_active=tts_active.is_set,
+                        post_reply_gate=(lambda: time.monotonic() < post_reply_until),
                         command_timeout_s=machine.command_timeout_s,
                         wake_only=args.wake_only):
                     if args.wake_only:
