@@ -27,7 +27,6 @@ class HarnessStateMachine:
         *,
         rgb: Any,
         play_ack: Callable[[], Any],
-        capture_command: Callable[[float], Any | None],
         infer: Callable[[Any], dict[str, Any]],
         act: Callable[[dict[str, Any]], Any],
         play_reply: Callable[[dict[str, Any], Any], Any],
@@ -35,7 +34,6 @@ class HarnessStateMachine:
     ) -> None:
         self.rgb = rgb
         self.play_ack = play_ack
-        self.capture_command = capture_command
         self.infer = infer
         self.act = act
         self.play_reply = play_reply
@@ -62,24 +60,7 @@ class HarnessStateMachine:
         """
         return self._busy_generation
 
-    def handle_wake(self) -> dict[str, Any] | None:
-        """Run one complete interaction; return None on command timeout."""
-        if self.state is not State.STANDBY:
-            return None
 
-        self._set_state(State.WAKE)
-        self._set_state(State.ACKNOWLEDGING)
-        self.play_ack()
-        self.rgb.wake()
-
-        self._set_state(State.LISTENING)
-        command_audio = self.capture_command(self.command_timeout_s)
-        if command_audio is None:
-            self.rgb.idle()
-            self._set_state(State.STANDBY)
-            return None
-
-        return self.handle_command(command_audio)
 
     def acknowledge_wake(self) -> None:
         """Enter LISTENING after the wake acknowledgement has completed.

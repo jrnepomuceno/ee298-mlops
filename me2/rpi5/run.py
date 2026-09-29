@@ -117,9 +117,6 @@ def parse_args() -> argparse.Namespace:
                        help="maximum mel frames per utterance (default: 400)")
     model.add_argument("--min-confidence", type=float, default=0.75,
                        help="minimum intent confidence (default: 0.75)")
-    model.add_argument("--pipeline", choices=["legacy", "facade"], default="facade",
-                       help="execution path: 'facade' (new facade+orchestrator, default) "
-                            "or 'legacy' (original inline DryRunDispatcher)")
 
     audio = parser.add_argument_group("audio")
     audio.add_argument("--no-ack", action="store_true",
@@ -461,34 +458,25 @@ def main() -> int:
                     }
                 else:
                     result = event["result"]
-                if args.pipeline == "facade":
-                    orch_result = harness.pipeline.process(result, source="microphone")
-                    event["result"] = result
-                    event["facade"] = orch_result.event
-                    event["reply"] = {"text": orch_result.reply_text,
-                                      "speak": True, "source": "facade"}
-                    current_event.clear()
-                    current_event.update(event)
-                    return result
-                # legacy path
-                action = harness.dispatcher.dispatch(result)
+                # Recognize only. Do NOT execute here: the state machine's
+                # handle_command() -> act() -> execute_action() is the single
+                # point where the action runs and the reply is spoken. Executing
+                # in infer_command as well made every command fire twice
+                # ("two Alexas speaking").
                 event["result"] = result
-                event["action"] = action
-                event["reply"] = build_reply(result, action)
                 current_event.clear()
                 current_event.update(event)
                 return result
 
             def execute_action(result):
-                if args.pipeline == "facade":
-                    # The facade already executed during infer_command; record
-                    # the outcome for the event log and return a marker.
-                    return {"status": "facade_handled",
-                            "code": "facade",
-                            "detail": "executed by facade+orchestrator"}
-                action = harness.dispatcher.dispatch(result)
-                current_event["action"] = action
-                return action
+                # Single execution path. The facade runs the action once and
+                # computes the reply text; play_reply() (called later by the
+                # state machine) is the only place audio is produced.
+                orch_result = harness.pipeline.process(result, source="microphone")
+                current_event["facade"] = orch_result.event
+                current_event["reply"] = {"text": orch_result.reply_text,
+                                          "speak": True, "source": "facade"}
+                return orch_result
 
             def _ducked_play(play_fn, *, kind: str):
                 """Play ``play_fn()`` with the output ducked underneath.
@@ -585,7 +573,6 @@ def main() -> int:
             machine = HarnessStateMachine(
                 rgb=rgb,
                 play_ack=play_ack,
-                capture_command=lambda _timeout: None,
                 infer=infer_command,
                 act=execute_action,
                 play_reply=play_reply,

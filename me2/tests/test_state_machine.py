@@ -34,10 +34,6 @@ class StateMachineTests(unittest.TestCase):
         def ack():
             calls.append("ack")
 
-        def capture(timeout):
-            calls.append(f"capture:{timeout}")
-            return command
-
         def infer(audio):
             calls.append(f"infer:{audio!r}")
             return {"intent": "turn_on_lights", "slots": {}}
@@ -52,7 +48,6 @@ class StateMachineTests(unittest.TestCase):
         machine = HarnessStateMachine(
             rgb=rgb,
             play_ack=ack,
-            capture_command=capture,
             infer=infer,
             act=act,
             play_reply=reply,
@@ -60,9 +55,13 @@ class StateMachineTests(unittest.TestCase):
         return machine, rgb, calls
 
     def test_complete_interaction_order(self):
+        # Mirror the live mic loop: acknowledge_wake() enters LISTENING, then
+        # handle_command() runs the captured audio through the rest.
         machine, rgb, calls = self.make_machine()
 
-        outcome = machine.handle_wake()
+        machine.acknowledge_wake()
+        outcome = machine.handle_command(
+            b"audio", generation=machine.current_generation())
 
         self.assertEqual(outcome["result"]["intent"], "turn_on_lights")
         self.assertEqual(
@@ -74,24 +73,29 @@ class StateMachineTests(unittest.TestCase):
         )
         self.assertEqual(
             rgb.calls, ["wake", "processing", "acting", "speaking", "idle"])
-        self.assertEqual(
-            calls,
-            ["ack", "capture:7.0", "infer:b'audio'", "act", "reply"],
-        )
+        self.assertEqual(calls, ["ack", "infer:b'audio'", "act", "reply"])
 
-    def test_timeout_returns_to_standby_without_inference(self):
-        machine, rgb, calls = self.make_machine(command=None)
+    def test_single_execution_no_double_reply(self):
+        # Regression: "two Alexas speaking". The action must run exactly once
+        # per command. infer_command() only recognizes; execute_action() (via
+        # act) is the sole execution point, and play_reply() speaks once.
+        machine, rgb, calls = self.make_machine()
 
-        self.assertIsNone(machine.handle_wake())
-        self.assertEqual(machine.state, State.STANDBY)
-        self.assertEqual(rgb.calls, ["wake", "idle"])
-        self.assertEqual(calls, ["ack", "capture:7.0"])
+        machine.acknowledge_wake()
+        machine.handle_command(b"audio",
+                               generation=machine.current_generation())
 
-    def test_wake_is_ignored_while_busy(self):
+        self.assertEqual(calls.count("act"), 1)
+        self.assertEqual(calls.count("reply"), 1)
+        self.assertEqual(calls.count("infer:b'audio'"), 1)
+
+    def test_acknowledge_wake_is_ignored_while_busy(self):
         machine, rgb, calls = self.make_machine()
         machine.state = State.PROCESSING
 
-        self.assertIsNone(machine.handle_wake())
+        machine.acknowledge_wake()
+
+        self.assertEqual(machine.state, State.PROCESSING)
         self.assertEqual(rgb.calls, [])
         self.assertEqual(calls, [])
 
