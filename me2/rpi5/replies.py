@@ -21,6 +21,9 @@ REPLY_WAV_BY_INTENT = {
     "what_time": "what_time.wav",
     "what_weather": "what_weather.wav",
     "what_reminders": "what_reminders.wav",
+    "volume_up": "volume_up.wav",
+    "volume_down": "volume_down.wav",
+    "mute": "mute.wav",
     "oov": "oov.wav",
 }
 
