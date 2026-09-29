@@ -102,13 +102,21 @@ def microphone_utterances(config: VADConfig | None = None,
                           on_wake: Any | None = None,
                           on_speech: Any | None = None,
                           on_timeout: Any | None = None,
-                          cooldown_s: float = 1.0,
+                          tts_active: Any | None = None,
+                          cooldown_s: float = 1.5,
                           command_timeout_s: float = 7.0,
                           wake_only: bool = False) -> Iterator[np.ndarray]:
     """Yield utterances from the default microphone until interrupted.
 
     ``sounddevice`` is imported lazily so replay/self-test mode does not need a
     recording device or the sounddevice package.
+
+    ``tts_active`` is a zero-arg predicate returning True while the assistant
+    is producing audio (TTS reply, alarm, timer ding). While it is True the mic
+    is effectively *closed*: every incoming frame is dropped before the VAD or
+    wake-word detector can latch onto our own voice. This is the real echo
+    guard -- it stops a spoken reply from being recognised as a second command
+    (the cause of the spurious "could you repeat it?" and double replies).
     """
     vad = EnergyVAD(config)
     wakeword_active = wakeword is None
@@ -146,6 +154,13 @@ def microphone_utterances(config: VADConfig | None = None,
     with capture_context:
         while True:
             frame = get_frame()
+            # Echo guard: while the assistant is producing audio (TTS reply,
+            # alarm, timer ding) the mic is effectively closed. Drop the frame
+            # before the VAD / wake-word detector can latch onto our own voice.
+            # This is what prevents a spoken reply from being recognised as a
+            # second command ("could you repeat it?" + double reply).
+            if tts_active is not None and tts_active():
+                continue
             if not wakeword_active:
                 if not wakeword.accepts(frame):
                     continue

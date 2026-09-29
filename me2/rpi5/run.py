@@ -430,6 +430,12 @@ def main() -> int:
                         if args.wakeword else None)
             vad_config = VADConfig(capture_device=args.input_device)
             current_event: dict[str, object] = {}
+            # Shared "assistant is producing audio" flag. Raised by
+            # _ducked_play for the full playback window (including the blocking
+            # play() call) and read by the microphone loop, which closes the mic
+            # while it is set. This is the echo guard that stops a spoken reply
+            # from being recognised as a second command.
+            tts_active = threading.Event()
 
             if args.vcm_only:
                 rgb.wake()
@@ -493,8 +499,16 @@ def main() -> int:
                 still catch the wake word, then returns to the pre-play level.
                 Fail-soft -- if ducking is unavailable the audio still plays at
                 full volume rather than failing.
+
+                Also raises the shared ``tts_active`` flag for the whole
+                playback window (including the blocking ``play()`` call) so the
+                microphone loop closes the mic and drops our own voice. Without
+                this the reply is heard by the mic, re-recognised as a second
+                command, and surfaces as a spurious "could you repeat it?" plus
+                a double reply.
                 """
                 ctrl = volume_controller
+                tts_active.set()
                 if ctrl is not None:
                     try:
                         ctrl.duck()
@@ -509,6 +523,7 @@ def main() -> int:
                             ctrl.unduck()
                         except Exception:  # noqa: BLE001
                             log(f"[{kind}] unduck failed", error=True)
+                    tts_active.clear()
 
             def play_reply(result, action):
                 # Dynamic (Piper TTS) intents: the spoken value is computed at
@@ -551,9 +566,21 @@ def main() -> int:
                 if args.no_ack:
                     return None
                 ack_path = str(Path(args.ack_wav))
-                result = wav_player.play_async(ack_path)
-                log_debug(f"ack_started wav={ack_path}")
-                return result
+                # Play the acknowledgement *blocking* so it finishes before
+                # command capture begins. The previous play_async() let the beep
+                # run over the user's command, contaminating the VAD capture and
+                # pushing the recognition below the confidence floor ("please
+                # repeat"). The capture loop's post-ack cooldown then discards
+                # the beep's tail. Fail-soft: a missing/failed ack must not kill
+                # the interaction.
+                try:
+                    result = wav_player.play(ack_path)
+                    log_debug(f"ack_finished wav={ack_path}")
+                    return result
+                except Exception as exc:  # noqa: BLE001
+                    log(f"[ack] acknowledgement playback failed: {exc}",
+                        error=True)
+                    return None
 
             machine = HarnessStateMachine(
                 rgb=rgb,
@@ -584,6 +611,7 @@ def main() -> int:
                         on_wake=acknowledge_wake,
                         on_speech=rgb.wake,
                         on_timeout=machine.cancel_listening,
+                        tts_active=tts_active.is_set,
                         command_timeout_s=machine.command_timeout_s,
                         wake_only=args.wake_only):
                     if args.wake_only:
