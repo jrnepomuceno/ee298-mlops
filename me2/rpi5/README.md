@@ -21,7 +21,6 @@ python -m rpi5.run --microphone --wakeword alexa \
 	--audio-device plughw:1,0 \
 	--rgb-executable /home/jdrnepomuceno9/.local/bin/quadcastrgb \
 	--checkpoint inference/best.pt
-python -m rpi5.mcp_server --checkpoint inference/best.pt
 ```
 
 Microphone mode listens on the default 16 kHz input device. The energy VAD
@@ -72,10 +71,3 @@ sequence is black (`solid 000000`) at idle, a fast cyan wave (`-s 10 wave
 green wave while TTS is playing. After TTS, it waits 100 ms and returns to
 black. The microphone remains active throughout; only the light controller is
 changed. Without this option, RGB commands are dry-run only.
-
-## MCP on the Pi
-
-The MCP server loads the harness once and exposes `health`, `recognize_file`,
-and `listen_once` over MCP stdio. An MCP client running on the Pi can call it
-without internet access. The tools return the same event, including the
-deterministic `reply.text` intended for display or offline TTS.

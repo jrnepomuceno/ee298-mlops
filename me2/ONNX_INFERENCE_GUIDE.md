@@ -12,7 +12,9 @@ This guide explains how to use the exported ONNX model for inference.
 
 ## Using the ONNX Model
 
-### 1. Simple Inference Script
+### 1. Inference Entry Point
 
-The `onnx_inference.py` script demonstrates basic usage of the ONNX model with random inputs:
+`inference/ort_infer.py` is the ONNX Runtime inference entry point (numpy +
+onnxruntime only, no torch). `inference/infer.py` is the equivalent torch
+`best.pt` path. Both share the same model contract.
 
