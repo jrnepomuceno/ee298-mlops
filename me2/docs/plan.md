@@ -1,37 +1,51 @@
 # ME2 — Voice Controlled Smart Device: Project Plan
 
-**Last updated:** 2026-09-19
+**Last updated:** 2026-09-29
 **Target device:** Raspberry Pi 5 (2 GB profile; actual unit 8 GB)
 **Hard constraints:** ≤ 6 MB int8 model · RTF ≤ 0.3 (near-instant) · fully on-device · no cloud · no LLM
+**Shipped model:** `v19-20260929-2` — 19-intent, 50-epoch CUDA, "large" preset (see §1, §2)
 
 ---
 
 ## 1. Problem statement
 
 ASR models are too large for on-device use. We build a **tiny Voice Command Model (VCM)** that
-maps audio directly to the ~10 most common smart-device commands, with slot extraction, in one
+maps audio directly to the ~18 most common smart-device commands, with slot extraction, in one
 trained model:
 
 ```
-log-mel (T, 80) → 2D conv stack (T ÷ 4) → Linear(10240→128) → BiGRU (2×128)
-    → intent head : 16-way classification (15 commands + OOV)
-    → slot head   : CTC over 77-token constrained vocab → rule-based parse_slots()
+log-mel (T, 80) → 2D conv stack (T ÷ 4) → Linear(15360→192) → BiGRU (2×192)
+    → intent head : 19-way classification (18 commands + OOV)
+    → slot head   : CTC over 88-token constrained vocab → rule-based parse_slots()
 ```
+
+The shipped model is the **"large" preset** (`conv_channels=96, hidden_size=192, num_layers=2`,
+**4,395,947 params** ≈ 4.40 MB int8 / 17.58 MB fp32). The smaller **"baseline" preset**
+(`64/128/2`, 1,959,915 params ≈ 1.96 MB int8) remains available for the tightest 2 GB profile.
 
 The constrained CTC vocabulary (digits + clock/slot words) is what replaces an LLM: decoding
 yields a transcript, and deterministic regexes turn (intent, transcript) into slots.
 
-### Intent taxonomy (16 classes)
+### Intent taxonomy (19 classes)
 
 `turn_on_lights`, `turn_off_lights`, `dim_lights`, `set_temperature`, `play_music`,
 `pause_music`, `stop_music`, `set_timer`, `set_alarm`, `stop_timer`, `remind`, `call`,
-`what_time`, `what_weather`, `what_reminders`, `oov`
+`what_time`, `what_weather`, `what_reminders`, `volume_up`, `volume_down`, `mute`, `oov`
+
+(The 16-class baseline gained `volume_up`, `volume_down`, `mute` in the 19-intent "Track B" build.)
 
 ---
 
 ## 2. Current status (verified by execution)
 
-### ✅ Done
+> **As of 2026-09-29** the project has moved well past the 16-intent baseline described below.
+> The **shipped model is `v19-20260929-2`** — a 19-intent "large" (4.40 M-param) model trained 50
+> epochs on CUDA. Validation (see `docs/VALIDATION.md`): val acc **94.46%**, macro-F1 **94.49%**,
+> on-Pi int8 **3.46 MB**, RTF **0.014**, p95 latency **28.5 ms**, on-distribution intent acc
+> **97.9%**. All 18 command intents are built and wired live through the facade; the assistant is
+> deployed and running on the Pi 5. The table below is the historical 16-intent snapshot.
+
+### ✅ Done (historical — 16-intent baseline, 2026-09-19)
 
 | Item | Evidence |
 |---|---|

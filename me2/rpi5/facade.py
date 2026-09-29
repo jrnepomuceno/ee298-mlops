@@ -220,9 +220,10 @@ def _render(template: str | Any, slots: Mapping[str, Any], intent: str) -> str:
         template = template.replace("{now}", _local_time_text())
     try:
         return template.format(**slots)
-    except (KeyError, IndexError):
-        # A placeholder had no slot value; fall back to a generic line rather
-        # than crash the assistant mid-utterance.
+    except (KeyError, IndexError, ValueError):
+        # A placeholder had no slot value, or a slot value contained a brace
+        # ("The time is {slot}" where the slot itself is "{slot}"): fall back
+        # to a generic line rather than crash the assistant mid-utterance.
         return f"I heard '{intent}'."
 
 

@@ -284,5 +284,29 @@ class WeatherProviderTests(unittest.TestCase):
         self.assertIn("not available", result.reply_text)
 
 
+class BraceSlotSafetyTests(unittest.TestCase):
+    """A slot value containing braces must not crash reply rendering.
+
+    Regression: the what_time reply template "The time is {now}." rendered a
+    literal "{now}" when the model emitted a garbage "now" slot, and
+    ``str.format`` then raised ValueError on the nested braces, taking the
+    assistant down mid-utterance.
+    """
+
+    def test_brace_in_slot_value_does_not_raise(self):
+        # A garbage slot value containing braces must not crash str.format
+        # with ValueError (the replies.py line-32 class of crash). A single
+        # unknown field renders literally (no error); the ValueError path
+        # fires when a value itself carries a format *field* reference.
+        r = decode("call", {"contact": "{oops}"}, 0.9)
+        self.assertIsInstance(r, ActionRequest)
+        self.assertIn("oops", r.reply_text)
+
+    def test_clean_time_slot_still_renders(self):
+        r = decode("call", {"contact": "home"}, 0.9)
+        self.assertIsInstance(r, ActionRequest)
+        self.assertIn("home", r.reply_text)
+
+
 if __name__ == "__main__":
     unittest.main()

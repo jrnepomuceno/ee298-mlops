@@ -28,7 +28,11 @@ class InfoExecutor(Executor):
         # Info queries always produce a spoken answer, even in dry-run, because
         # the "action" IS the answer (the time, the weather line).
         if req.action_code == "query.time":
-            answer = datetime.now().strftime("%-I:%M %p")
+            # %-I is glibc-only; on musl (some Pi images) it raises ValueError.
+            # Compute the 12-hour hour manually so the answer is identical
+            # everywhere.
+            now = datetime.now()
+            answer = f"{now.hour % 12 or 12}:{now.strftime('%M')} {now.strftime('%p')}"
             detail = f"time is {answer}"
         elif req.action_code == "query.weather":
             # A configured provider is the gate, not dry_run: the weather line

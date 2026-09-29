@@ -65,7 +65,7 @@ def build_reply(result: dict[str, Any] | None, action: dict[str, Any] | None) ->
         "stop_timer": f"{prefix}stop the timer.",
         "remind": f"{prefix}remind you to {slots.get('note', 'do that')}.",
         "call": f"{prefix}call {slots.get('contact', 'that contact')}.",
-        "what_time": f"The time is {_local_time_text()}.",
+        "what_time": f"The time is {slots.get('time', _local_time_text())}.",
         "what_weather": "Weather is not available without a configured local source.",
         "what_reminders": "Your local reminders are available.",
     }

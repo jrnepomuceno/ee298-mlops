@@ -23,9 +23,13 @@ class MediaExecutor(Executor):
     category = "media"
 
     def __init__(self, dry_run: bool = True,
-                 player: MediaPlayerController | None = None) -> None:
+                 player: MediaPlayerController | None = None,
+                 volume_controller=None,
+                 media_volume: int | None = None) -> None:
         super().__init__(dry_run)
         self.player = player
+        self.volume_controller = volume_controller
+        self.media_volume = media_volume
 
     def _live(self, req: ActionRequest) -> ExecutionResult:
         ctrl = self.player
@@ -38,6 +42,7 @@ class MediaExecutor(Executor):
         try:
             if code == "media.play":
                 name = ctrl.play()
+                self._apply_media_volume()
                 detail = f"Playing {name}"
             elif code == "media.pause":
                 if ctrl.pause():
@@ -64,3 +69,21 @@ class MediaExecutor(Executor):
                 ok=False, intent=req.intent, category=self.category,
                 action_code=code, detail=f"music playback failed: {exc}",
                 side_effects=False)
+
+    def _apply_media_volume(self) -> None:
+        """Set the media stream's own PipeWire volume, if configured.
+
+        Keeps music at ``media_volume`` independently of the master sink that
+        TTS/alarms use. Fail-soft: no controller, no level, or a backend
+        without per-stream support (``set_channel`` returns ``None``) simply
+        leaves the stream at whatever level PipeWire assigned it.
+        """
+        if (self.volume_controller is None
+                or self.media_volume is None
+                or self.player is None):
+            return
+        try:
+            channel = getattr(self.player, "player", None) or "ffplay"
+            self.volume_controller.set_channel(channel, self.media_volume)
+        except Exception:  # noqa: BLE001
+            pass

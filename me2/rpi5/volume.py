@@ -46,6 +46,41 @@ def _clamp(level: int) -> int:
     return max(MIN_LEVEL, min(MAX_LEVEL, int(level)))
 
 
+_STREAM_NODE_RE = re.compile(r"^\s*(\d+)\s+\S+\s+(.+)$")
+
+
+def _find_stream_node(wpctl_status: str, channel: str) -> str | None:
+    """Locate a PipeWire *stream* node id from ``wpctl status`` output.
+
+    ``wpctl status`` lists nodes as ``<id> <type> <name>`` lines under the
+    ``Stream objects`` section (e.g. ``12 Stream Output ffplay ...``). Sinks
+    and sources are separate sections and are never matched. ``channel`` is a
+    substring of the stream name (case-insensitive) or an exact numeric node
+    id. Returns the node id as a string, or ``None``.
+    """
+    channel = channel.strip()
+    if channel.isdigit():
+        return channel
+    needle = channel.lower()
+    in_streams = False
+    for line in wpctl_status.splitlines():
+        stripped = line.strip()
+        # Section headers in wpctl status: "Audio", "Video", "Stream objects",
+        # "Monitor streams", "Node objects", "Endpoint objects", ...
+        if stripped.startswith(("Stream objects", "Monitor streams")):
+            in_streams = stripped.startswith("Stream objects")
+            continue
+        if stripped.startswith(("Node objects", "Endpoint objects", "Session")):
+            in_streams = False
+            continue
+        if not in_streams:
+            continue
+        m = _STREAM_NODE_RE.match(line)
+        if m and needle in m.group(2).lower():
+            return m.group(1)
+    return None
+
+
 def _run(cmd: list[str], timeout: float = 5.0) -> str:
     """Run a command, return stripped stdout. Raises on non-zero exit."""
     proc = subprocess.run(
@@ -106,10 +141,18 @@ class VolumeController:
             return _clamp(int(m.group()))
         if self.backend == "wpctl":
             out = _run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
+            # ``wpctl get-volume`` prints a 0..1 fraction ("Volume: 0.47"),
+            # not a percentage. Some builds emit "47%" instead, so accept both.
             m = re.search(r"(\d+(?:\.\d+)?)%", out)
-            if not m:
-                raise RuntimeError(f"could not parse wpctl volume: {out!r}")
-            return _clamp(round(float(m.group(1))))
+            if m:
+                return _clamp(round(float(m.group(1))))
+            m = re.search(r"(?:^|\D)(\d+(?:\.\d+)?)\s*(?:$|\D)", out)
+            if m:
+                value = float(m.group(1))
+                if value <= 1.0:  # fraction form, e.g. "Volume: 0.47"
+                    return _clamp(round(value * 100.0))
+                return _clamp(round(value))  # bare integer percent, e.g. "47"
+            raise RuntimeError(f"could not parse wpctl volume: {out!r}")
         if self.backend == "amixer":
             out = _run(["amixer", "sget", "Master"])
             m = re.search(r"\[(\d+)%\]", out)
@@ -160,6 +203,48 @@ class VolumeController:
         level = _clamp(level)
         self._set_level(level)
         LOGGER.info("[volume] set level=%s%%", level)
+        return level
+
+    def set_channel(self, channel: str, level: int) -> int | None:
+        """Set a *named* PipeWire stream's volume, independent of the master.
+
+        This is how per-application levels work on the Pi: PipeWire exposes
+        every playing app (ffplay, pw-play, ...) as its own stream node, and
+        ``wpctl set-volume <node> <pct>`` adjusts only that stream. The master
+        sink (:meth:`set` / duck) is untouched, so TTS and media can have
+        different levels at the same time.
+
+        ``channel`` is a stream name (substring match, e.g. ``"ffplay"``) or a
+        numeric node id. Returns the clamped level applied, or ``None`` when
+        the backend cannot do per-stream control (no ``wpctl`` / no matching
+        stream) -- callers should treat that as "fell back to master".
+        """
+        level = _clamp(level)
+        if self._set_override is not None:
+            # Tests inject a master-only override; per-stream control is not
+            # simulatable there, so report unsupported.
+            return None
+        if self.backend != "wpctl" or not shutil.which("wpctl"):
+            LOGGER.info("[volume] per-stream set unsupported (backend=%s)",
+                        self.backend)
+            return None
+        try:
+            nodes = _run(["wpctl", "status"])
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("[volume] wpctl status failed: %s", exc)
+            return None
+        node_id = _find_stream_node(nodes, channel)
+        if node_id is None:
+            LOGGER.info("[volume] no stream matching %r", channel)
+            return None
+        try:
+            _run(["wpctl", "set-volume", str(node_id), f"{level}%"])
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("[volume] wpctl set-volume %s failed: %s",
+                           node_id, exc)
+            return None
+        LOGGER.info("[volume] stream %r (node %s) set level=%s%%",
+                    channel, node_id, level)
         return level
 
     def step(self, delta: int) -> int:

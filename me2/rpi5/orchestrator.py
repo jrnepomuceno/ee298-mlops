@@ -157,6 +157,7 @@ def default_orchestrator(*, rgb: Any | None = None,
                          reminder_store: Any | None = None,
                          volume_controller: Any | None = None,
                          media_player: Any | None = None,
+                         media_volume: int | None = None,
                          light_driver: Any | None = None,
                          dialer: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
@@ -184,7 +185,9 @@ def default_orchestrator(*, rgb: Any | None = None,
     ex = {
         "lights": LightExecutor(dry_run, driver=light_driver),
         "hvac": HvacExecutor(dry_run),
-        "media": MediaExecutor(dry_run, player=media_player),
+        "media": MediaExecutor(dry_run, player=media_player,
+                              volume_controller=volume_controller,
+                              media_volume=media_volume),
         "timer": TimerExecutor(dry_run, manager=timer_manager),
         "remind": ReminderExecutor(dry_run, store=reminder_store),
         "comms": CommsExecutor(dry_run, dialer=dialer),

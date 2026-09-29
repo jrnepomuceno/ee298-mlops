@@ -178,6 +178,12 @@ def parse_args() -> argparse.Namespace:
     music.add_argument("--player", default=None,
                        help="Force a specific audio player binary "
                             "(default: auto-detect ffplay/pw-play/aplay)")
+    music.add_argument("--media-volume", type=int, default=None,
+                       metavar="PCT",
+                       help="Per-app PipeWire volume for the music stream "
+                            "(0-100). Independent of the master sink that "
+                            "TTS/alarms use. Requires --live-media and a "
+                            "wpctl-capable Pi; ignored elsewhere.")
 
     lights = parser.add_argument_group("lights")
     lights.add_argument("--light-driver", default="hyperx-duocast",
@@ -268,8 +274,10 @@ def main() -> int:
             # Duck the master volume under the ring/speech so the mic can still
             # hear the wake word (Echo-style), then restore. Self-contained so
             # the timer thread never depends on the mic-loop closures.
+            # Ducking is disabled: the master dip caused audible volume
+            # pumping and still leaked into the mic. Play at full volume.
             ctrl = volume_controller
-            if ctrl is not None:
+            if False:  # ducking disabled
                 try:
                     ctrl.duck()
                 except Exception:  # noqa: BLE001
@@ -278,7 +286,7 @@ def main() -> int:
             try:
                 play_fn(path)
             finally:
-                if ctrl is not None:
+                if False:  # ducking disabled
                     try:
                         ctrl.unduck()
                     except Exception:  # noqa: BLE001
@@ -366,6 +374,7 @@ def main() -> int:
                                   reminder_store=reminder_store,
                                   volume_controller=volume_controller,
                                   media_player=media_player,
+                                  media_volume=args.media_volume,
                                   light_driver=light_driver,
                                   dialer=dialer)
         harness = PiHarness(HarnessConfig(
@@ -497,7 +506,7 @@ def main() -> int:
                 """
                 ctrl = volume_controller
                 tts_active.set()
-                if ctrl is not None:
+                if False:  # ducking disabled
                     try:
                         ctrl.duck()
                     except Exception:  # noqa: BLE001
@@ -506,7 +515,7 @@ def main() -> int:
                 try:
                     return play_fn()
                 finally:
-                    if ctrl is not None:
+                    if False:  # ducking disabled
                         try:
                             ctrl.unduck()
                         except Exception:  # noqa: BLE001

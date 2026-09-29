@@ -1,0 +1,59 @@
+{
+  "tag": "v19-20260929-2",
+  "threads": 1,
+  "runs": 200,
+  "provider": "CPUExecutionProvider",
+  "platform": "darwin",
+  "fidelity": {
+    "n_inputs": 26,
+    "intent_argmax_agreement": 1.0,
+    "ctc_token_seq_agreement": 0.8846,
+    "intent_cos_mean": 0.999773,
+    "ctc_cos_mean": 0.999829,
+    "intent_l2_mean": 0.86557,
+    "ctc_l2_mean": 16.3402
+  },
+  "perf": {
+    "0.5s": {
+      "T": 50,
+      "mean_ms": 2.373,
+      "p50_ms": 2.344,
+      "p95_ms": 2.547,
+      "max_ms": 3.025,
+      "rtf": 0.0047
+    },
+    "1.0s": {
+      "T": 100,
+      "mean_ms": 4.735,
+      "p50_ms": 4.706,
+      "p95_ms": 5.099,
+      "max_ms": 5.3,
+      "rtf": 0.0047
+    },
+    "1.5s": {
+      "T": 150,
+      "mean_ms": 7.068,
+      "p50_ms": 7.063,
+      "p95_ms": 7.315,
+      "max_ms": 7.655,
+      "rtf": 0.0047
+    },
+    "2.0s": {
+      "T": 200,
+      "mean_ms": 9.484,
+      "p50_ms": 9.48,
+      "p95_ms": 9.752,
+      "max_ms": 10.312,
+      "rtf": 0.0047
+    },
+    "3.0s": {
+      "T": 300,
+      "mean_ms": 14.46,
+      "p50_ms": 14.436,
+      "p95_ms": 14.773,
+      "max_ms": 21.171,
+      "rtf": 0.0048
+    }
+  },
+  "mel_extract_ms_1p5s": 0.27
+}
