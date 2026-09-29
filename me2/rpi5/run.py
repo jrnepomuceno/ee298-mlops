@@ -520,6 +520,12 @@ def main() -> int:
                             ctrl.unduck()
                         except Exception:  # noqa: BLE001
                             log(f"[{kind}] unduck failed", error=True)
+                    # Post-reply tail: keep the mic closed for a brief
+                    # additional window so speaker ring-down and early room
+                    # reflections are absorbed before the wake detector
+                    # re-arms. 300 ms is enough for a small-room speaker to
+                    # settle without noticeably delaying the next interaction.
+                    time.sleep(0.3)
                     tts_active.clear()
 
             def play_reply(result, action):
@@ -586,6 +592,14 @@ def main() -> int:
                 # repeat"). The capture loop's post-ack cooldown then discards
                 # the beep's tail. Fail-soft: a missing/failed ack must not kill
                 # the interaction.
+                #
+                # AEC: raise tts_active for the duration of the ack beep so the
+                # microphone loop drops every frame while the speaker is
+                # producing the two-tone chirp. Without this the beep's own
+                # energy (and its room reflection) reaches the mic and can
+                # either trip the VAD or, worse, be mis-scored by the wake-word
+                # detector as a second "Alexa" (the classic double-trigger).
+                tts_active.set()
                 try:
                     result = wav_player.play(ack_path)
                     log_debug(f"ack_finished wav={ack_path}")
@@ -594,6 +608,8 @@ def main() -> int:
                     log(f"[ack] acknowledgement playback failed: {exc}",
                         error=True)
                     return None
+                finally:
+                    tts_active.clear()
 
             machine = HarnessStateMachine(
                 rgb=rgb,

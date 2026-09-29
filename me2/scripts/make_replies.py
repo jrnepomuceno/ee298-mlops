@@ -226,6 +226,54 @@ def synth_reply(espeak: str, text: str, dest: str) -> bool:
     return True
 
 
+
+# --------------------------------------------------------------------------- #
+# Piper TTS synthesis (preferred when espeak-ng is unavailable).
+# --------------------------------------------------------------------------- #
+PIPER_BIN_DEFAULT = os.path.expanduser("~/piper-venv/bin/piper")
+PIPER_MODEL_DEFAULT = os.path.expanduser("~/piper-voices/en_US-lessac-medium.onnx")
+
+
+def _find_piper():
+    """Locate the Piper binary and voice model. Returns (bin, model) or None."""
+    bin_path = shutil.which("piper") or (
+        PIPER_BIN_DEFAULT if os.path.isfile(PIPER_BIN_DEFAULT) else None
+    )
+    model_path = PIPER_MODEL_DEFAULT if os.path.isfile(PIPER_MODEL_DEFAULT) else None
+    if bin_path and model_path:
+        return bin_path, model_path
+    return None
+
+
+def synth_reply_piper(piper_bin, model, text, dest):
+    """Synthesise one reply WAV with Piper. Resamples to SR if needed."""
+    tmp = dest + ".tmp.wav"
+    cmd = [piper_bin, "--model", model, "--output_file", tmp]
+    try:
+        subprocess.run(cmd, input=text + "\n", text=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                       check=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"  ! piper failed for {text!r}: {exc}")
+        return False
+    try:
+        with wave.open(tmp, "rb") as w:
+            if w.getframerate() != SR:
+                raw = w.readframes(w.getnframes())
+                samples = list(struct.unpack("<%dh" % (len(raw) // 2), raw))
+                ratio = SR / w.getframerate()
+                new_len = int(len(samples) * ratio)
+                resampled = [int(samples[min(len(samples) - 1, int(i / ratio))])
+                             for i in range(new_len)]
+                _write_wav(dest, resampled)
+            else:
+                shutil.move(tmp, dest)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return True
+
+
 # --------------------------------------------------------------------------- #
 # Validation.
 # --------------------------------------------------------------------------- #
@@ -285,18 +333,24 @@ def main() -> int:
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # 1. Spoken replies (espeak-ng).
+    # 1. Spoken replies (Piper preferred, espeak-ng fallback).
+    piper = _find_piper()
     espeak = _find_espeak()
-    if espeak:
-        print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with {espeak}")
+    if piper is not None:
+        print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with Piper")
+        for intent in sorted(REQUIRED_INTENTS):
+            dest = os.path.join(out_dir, f"{intent}.wav")
+            if synth_reply_piper(piper[0], piper[1], REPLY_TEXT[intent], dest):
+                print(f"  wrote {os.path.basename(dest)}")
+    elif espeak is not None:
+        print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with espeak-ng")
         for intent in sorted(REQUIRED_INTENTS):
             dest = os.path.join(out_dir, f"{intent}.wav")
             if synth_reply(espeak, REPLY_TEXT[intent], dest):
                 print(f"  wrote {os.path.basename(dest)}")
     else:
-        print("WARNING: espeak-ng not found; skipping spoken replies.")
-        print("         Install it (e.g. `brew install espeak-ng`) and re-run,")
-        print("         or generate the intent WAVs with Piper on the Pi.")
+        print("WARNING: neither Piper nor espeak-ng found; skipping spoken replies.")
+        print("         Install Piper (~/piper-venv) or espeak-ng and re-run.")
 
     # 2. Beeps / tones (pure stdlib).
     print("Synthesising beeps / tones (stdlib)")
