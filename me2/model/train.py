@@ -78,13 +78,21 @@ def train_one_epoch(model: VCM,
     # bf16 autocast for the forward+loss only; backward/step run in fp32
     # (bf16 needs no GradScaler). Enabled only on cuda.
     amp_enabled = bool(amp) and device.type == "cuda"
+    # non_blocking overlaps the H2D copy with compute when the loader pins
+    # memory (args.pin_memory); falls back to a sync copy on CPU.
+    nb = device.type == "cuda"
+    # Accumulate metrics on-device and sync once at the end of the epoch
+    # instead of 4x per step (each .item() forces a device->host stall).
+    # acc_dev = [weighted loss sum, weighted ce sum, weighted ctc sum]
+    acc_dev = torch.zeros(3, device=device)
+    correct_dev = torch.zeros((), device=device)
 
     for mels, intents, _transcripts, ctc_targets, ctc_lengths, mels_lengths in loader:
-        mels = mels.to(device)
-        intents = intents.to(device)
-        ctc_targets = ctc_targets.to(device)
-        ctc_lengths = ctc_lengths.to(device)
-        mels_lengths = mels_lengths.to(device)
+        mels = mels.to(device, non_blocking=nb)
+        intents = intents.to(device, non_blocking=nb)
+        ctc_targets = ctc_targets.to(device, non_blocking=nb)
+        ctc_lengths = ctc_lengths.to(device, non_blocking=nb)
+        mels_lengths = mels_lengths.to(device, non_blocking=nb)
 
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast("cuda", dtype=torch.bfloat16,
@@ -103,11 +111,18 @@ def train_one_epoch(model: VCM,
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
 
-        total += loss.item() * intents.size(0)
-        ce_sum += ce.item() * intents.size(0)
-        ctc_sum += ctc.item() * intents.size(0)
-        correct += (intent_logits.argmax(dim=-1) == intents).sum().item()
-        n += intents.size(0)
+        bs = intents.size(0)
+        w = bs
+        acc_dev[0] += (loss * w).detach()
+        acc_dev[1] += (ce * w).detach()
+        acc_dev[2] += (ctc * w).detach()
+        correct_dev += (intent_logits.argmax(dim=-1) == intents).sum().detach()
+        n += bs
+
+    # Single sync at the end of the epoch.
+    total, ce_sum, ctc_sum, correct = (
+        acc_dev[0].item(), acc_dev[1].item(), acc_dev[2].item(), correct_dev.item())
+    del acc_dev, correct_dev
 
     return {
         "loss": total / max(n, 1),
