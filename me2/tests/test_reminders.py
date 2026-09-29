@@ -148,14 +148,14 @@ class SummarizeTests(unittest.TestCase):
         s = self._fresh()
         s.add("a")
         s.add("b")
-        self.assertEqual(s.summarize(), "You have 2 reminders: a, and b.")
+        self.assertEqual(s.summarize(), "You have 2 reminders. 1. a. 2. b.")
 
     def test_many(self):
         s = self._fresh()
         s.add("a")
         s.add("b")
         s.add("c")
-        self.assertEqual(s.summarize(), "You have 3 reminders: a, b, and c.")
+        self.assertEqual(s.summarize(), "You have 3 reminders. 1. a. 2. b. 3. c.")
 
     def test_blank_note_falls_back_to_label(self):
         s = self._fresh()
@@ -177,7 +177,7 @@ class InfoExecutorRemindersTests(unittest.TestCase):
         res = ex.run(self._req())
         self.assertTrue(res.ok)
         self.assertEqual(res.payload["answer"],
-                         "You have 2 reminders: take out the trash, and call Mom.")
+                         "You have 2 reminders. 1. take out the trash. 2. call Mom.")
         self.assertFalse(res.side_effects)
 
     def test_no_store_returns_neutral_line(self):
@@ -237,7 +237,7 @@ class FacadeWhatRemindersTests(unittest.TestCase):
         self.assertTrue(res.handled)
         self.assertIsNone(res.reject)
         self.assertEqual(res.execution.payload["answer"],
-                         "You have 2 reminders: take out the trash, and call Mom.")
+                         "You have 2 reminders. 1. take out the trash. 2. call Mom.")
         self.assertEqual(res.reply_text, res.execution.payload["answer"])
 
     def test_empty_store_spoken(self):

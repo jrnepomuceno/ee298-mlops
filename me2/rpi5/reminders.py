@@ -18,6 +18,7 @@ Design goals
 from __future__ import annotations
 
 import json
+import re
 import os
 import tempfile
 import threading
@@ -108,9 +109,27 @@ class ReminderStore:
     # ------------------------------------------------------------------ #
     # Mutations
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _clean_note(note: str) -> str:
+        """Strip ASR artifacts so the stored note reads naturally.
+
+        The model emits ``<unk>`` for words it could not transcribe (e.g.
+        "water <unk>" for "water the plants"). We drop those tokens and any
+        dangling punctuation so the reminder is not stored/spoken with a raw
+        ``<unk>`` marker.
+        """
+        text = str(note)
+        # Remove explicit unknown-token markers in any casing.
+        text = re.sub(r"<\s*unk\s*>", " ", text, flags=re.IGNORECASE)
+        # Collapse whitespace.
+        text = re.sub(r"\s+", " ", text).strip()
+        # Trim stray leading/trailing punctuation left by a dropped token.
+        text = text.strip(" ,.;:-")
+        return text
+
     def add(self, note: str = "") -> Dict[str, Any]:
         """Add a reminder and persist it. Returns the new record."""
-        note = str(note).strip()
+        note = self._clean_note(note)
         with self._lock:
             record = {
                 "id": self._next_id,
@@ -155,14 +174,15 @@ class ReminderStore:
             return len(self._records)
 
     def summarize(self) -> str:
-        """Render a single spoken line describing the current reminders.
+        """Render the current reminders as an *itemized* spoken list.
 
-        Examples::
+        Each reminder is read on its own numbered item so the user hears a
+        clear list rather than one run-on sentence::
 
             You have no reminders.
             You have 1 reminder: take out the trash.
-            You have 2 reminders: take out the trash, and call Mom.
-            You have 3 reminders: a, b, and c.
+            You have 2 reminders. 1. take out the trash. 2. call Mom.
+            You have 3 reminders. 1. a. 2. b. 3. c.
         """
         with self._lock:
             records = list(self._records)
@@ -170,12 +190,10 @@ class ReminderStore:
             return "You have no reminders."
         n = len(records)
         notes = [r["note"].strip() for r in records]
-        # Fall back to a generic label for any blank note so the line still
-        # reads naturally (the model can't fill the note yet in this scope).
+        # Fall back to a generic label for any blank note so the item still
+        # reads naturally (the model can't always fill the note).
         notes = [note if note else "reminder" for note in notes]
         if n == 1:
             return f"You have 1 reminder: {notes[0]}."
-        if n == 2:
-            return f"You have 2 reminders: {notes[0]}, and {notes[1]}."
-        head = ", ".join(notes[:-1])
-        return f"You have {n} reminders: {head}, and {notes[-1]}."
+        items = ". ".join(f"{i}. {note}" for i, note in enumerate(notes, start=1))
+        return f"You have {n} reminders. {items}."
