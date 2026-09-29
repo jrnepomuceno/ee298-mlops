@@ -28,25 +28,64 @@ REPLY_WAV_BY_INTENT = {
 }
 
 
-def reply_wav_name(result: dict[str, Any] | None, action: dict[str, Any] | None) -> str:
+def _action_view(action: Any) -> dict[str, Any]:
+    """Normalise an action outcome into a flat dict for reply selection.
+
+    ``action`` arrives in one of two shapes depending on the execution path:
+
+    * a plain ``dict`` from the legacy :class:`~rpi5.harness.DryRunDispatcher`
+      (keys ``status`` / ``code`` / ``action``), or
+    * an :class:`~rpi5.orchestrator.OrchestratorResult` dataclass from the
+      facade path (attributes ``handled`` / ``reject`` / ``request`` /
+      ``execution``).
+
+    Both reduce to the same ``{"status", "code"}`` view that
+    :func:`reply_wav_name` and :func:`build_reply` select on. Treating a
+    non-dict ``action`` as ``{}`` (the old behaviour) made an OOV utterance
+    crash with ``AttributeError: 'OrchestratorResult' object has no attribute
+    'get'`` because ``OrchestratorResult`` has no ``.get``.
+    """
+    if action is None:
+        return {}
+    if isinstance(action, dict):
+        return action
+    # OrchestratorResult (or any object exposing these attributes).
+    reject = getattr(action, "reject", None)
+    if reject is not None:
+        # Map the facade reason onto the legacy action code that the reply
+        # selectors key on, so an OOV / low-confidence rejection picks oov.wav
+        # exactly as the old dict-shaped path did.
+        reason = getattr(reject, "reason", "")
+        code = {
+            "oov": "out_of_vocabulary",
+            "low_confidence": "confidence_below_threshold",
+        }.get(reason, reason)
+        return {"status": "rejected", "code": code}
+    request = getattr(action, "request", None)
+    if request is not None:
+        return {"status": "dry_run", "code": getattr(request, "action_code", "")}
+    return {}
+
+
+def reply_wav_name(result: dict[str, Any] | None, action: Any) -> str:
     """Select a static reply WAV for a recognition event."""
     result = result or {}
-    action = action or {}
-    if action.get("code") == "out_of_vocabulary":
+    view = _action_view(action)
+    if view.get("code") == "out_of_vocabulary":
         return "oov.wav"
-    if action.get("code") == "confidence_below_threshold":
+    if view.get("code") == "confidence_below_threshold":
         return "oov.wav"
     return REPLY_WAV_BY_INTENT.get(result.get("intent", "oov"), "oov.wav")
 
 
-def build_reply(result: dict[str, Any] | None, action: dict[str, Any] | None) -> dict[str, Any]:
+def build_reply(result: dict[str, Any] | None, action: Any) -> dict[str, Any]:
     """Build a truthful spoken/display reply without an LLM or ASR."""
     result = result or {}
-    action = action or {}
-    if action.get("status") == "rejected":
-        if action.get("code") == "out_of_vocabulary":
+    view = _action_view(action)
+    if view.get("status") == "rejected":
+        if view.get("code") == "out_of_vocabulary":
             text = "I did not recognize that command."
-        elif action.get("code") == "confidence_below_threshold":
+        elif view.get("code") == "confidence_below_threshold":
             text = "I am not confident I understood that."
         else:
             text = "I cannot perform that command yet."
@@ -54,7 +93,7 @@ def build_reply(result: dict[str, Any] | None, action: dict[str, Any] | None) ->
 
     intent = result.get("intent", "unknown")
     slots = result.get("slots") or {}
-    prefix = "I would " if action.get("status") == "dry_run" else ""
+    prefix = "I would " if view.get("status") == "dry_run" else ""
     templates = {
         "turn_on_lights": f"{prefix}turn the lights on.",
         "turn_off_lights": f"{prefix}turn the lights off.",

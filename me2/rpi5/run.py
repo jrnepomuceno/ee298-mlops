@@ -560,9 +560,20 @@ def main() -> int:
                 wav_name = reply_wav_name(result, action)
                 wav_path = Path(args.reply_dir) / wav_name
                 if not wav_path.exists():
-                    raise FileNotFoundError(f"reply WAV not found: {wav_path}")
-                current_event["tts"] = _ducked_play(
-                    lambda: wav_player.play(str(wav_path)), kind="tts")
+                    # Fail soft: a missing/corrupt reply asset must never crash
+                    # the interaction loop. Log it and stay silent for this
+                    # turn rather than raising out of the state machine.
+                    log(f"[reply] reply WAV not found, staying silent: {wav_path}",
+                        error=True)
+                    current_event["tts"] = {"played": False, "error": "missing_wav"}
+                    return
+                try:
+                    current_event["tts"] = _ducked_play(
+                        lambda: wav_player.play(str(wav_path)), kind="tts")
+                except Exception as exc:  # noqa: BLE001 - never kill the loop
+                    log(f"[reply] reply playback failed ({wav_name}): {exc}",
+                        error=True)
+                    current_event["tts"] = {"played": False, "error": str(exc)}
 
             def play_ack():
                 if args.no_ack:
