@@ -277,7 +277,26 @@ class ExecutorTests(unittest.TestCase):
         ex = MediaExecutor(dry_run=False, player=self.ctrl)
         res = ex.run(self._decode("stop_music"))
         self.assertTrue(res.ok)
-        self.assertEqual(res.detail, "Nothing is playing")
+        self.assertEqual(res.detail, "No music is playing.")
+        self.assertEqual(res.payload["answer"], "No music is playing.")
+
+    def test_pause_when_idle(self):
+        ex = MediaExecutor(dry_run=False, player=self.ctrl)
+        res = ex.run(self._decode("pause_music"))
+        self.assertTrue(res.ok)
+        self.assertEqual(res.detail, "No music is playing.")
+
+    def test_play_when_no_music_available(self):
+        """Empty music directory: play is acknowledged (ok) with a canned
+        reply, not the generic 'Sorry, that didn't work.' apology."""
+        empty = self.tmp / "empty"
+        empty.mkdir()
+        ctrl = MediaPlayerController(directory=empty, runner=self.runner)
+        ex = MediaExecutor(dry_run=False, player=ctrl)
+        res = ex.run(self._decode("play_music"))
+        self.assertTrue(res.ok)
+        self.assertIn("couldn't find any music", res.detail)
+        self.assertEqual(res.payload["answer"], res.detail)
 
     def test_no_controller_fails_soft(self):
         ex = MediaExecutor(dry_run=False, player=None)

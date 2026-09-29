@@ -70,6 +70,9 @@ REPLY_TEXT = {
     "play_music":       "Playing music.",
     "pause_music":      "Pausing the music.",
     "stop_music":       "Stopping the music.",
+    # (pause_music / stop_music are now spoken dynamically from the live reply
+    #  -- "No music is playing." when idle -- so these canned WAVs are only a
+    #  fallback if Piper TTS is unavailable.)
     "set_timer":        "Setting the timer.",
     "set_alarm":        "Alarm set.",
     "stop_timer":       "Timer stopped.",

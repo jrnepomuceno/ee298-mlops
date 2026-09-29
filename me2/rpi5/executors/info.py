@@ -32,8 +32,14 @@ class InfoExecutor(Executor):
             # Compute the 12-hour hour manually so the answer is identical
             # everywhere.
             now = datetime.now()
-            answer = f"{now.hour % 12 or 12}:{now.strftime('%M')} {now.strftime('%p')}"
-            detail = f"time is {answer}"
+            clock = f"{now.hour % 12 or 12}:{now.strftime('%M')} {now.strftime('%p')}"
+            # The spoken line must read as a full sentence ("The time is 1:45
+            # PM."), not a bare clock value. The orchestrator prefers
+            # payload["answer"] over the facade template, so the sentence has
+            # to live here -- otherwise the "The time is" wrapper is dropped
+            # and the assistant only says the time.
+            answer = f"The time is {clock}."
+            detail = f"time is {clock}"
         elif req.action_code == "query.weather":
             # A configured provider is the gate, not dry_run: the weather line
             # is read-only (no hardware side effect), so it is safe to fetch
@@ -42,8 +48,13 @@ class InfoExecutor(Executor):
             if self.weather_fn is not None:
                 try:
                     answer = self.weather_fn()
-                except Exception as exc:  # noqa: BLE001
-                    answer = f"Weather lookup failed: {exc}"
+                except Exception:  # noqa: BLE001
+                    # A failed lookup is usually a missing API key, no network,
+                    # or the service being unreachable. Speak a calm apology
+                    # instead of echoing the raw exception (which reads as
+                    # "Weather lookup failed: <urlopen error ...>").
+                    answer = ("I'm sorry, I couldn't reach the weather "
+                              "service right now.")
             else:
                 answer = "Weather is not available without a configured source."
             detail = answer

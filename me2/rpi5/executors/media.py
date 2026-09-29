@@ -15,7 +15,7 @@ and threaded through :func:`~rpi5.orchestrator.default_orchestrator` ->
 from __future__ import annotations
 
 from ..facade import ActionRequest
-from ..media import MediaPlayerController
+from ..media import MediaError, MediaPlayerController
 from .base import ExecutionResult, Executor
 
 
@@ -48,12 +48,12 @@ class MediaExecutor(Executor):
                 if ctrl.pause():
                     detail = f"Paused {ctrl.current_track}"
                 else:
-                    detail = "Nothing is playing"
+                    detail = "No music is playing."
             elif code == "media.stop":
                 if ctrl.stop():
                     detail = "Stopped the music"
                 else:
-                    detail = "Nothing is playing"
+                    detail = "No music is playing."
             else:
                 return ExecutionResult(
                     ok=False, intent=req.intent, category=self.category,
@@ -64,6 +64,19 @@ class MediaExecutor(Executor):
                 ok=True, intent=req.intent, category=self.category,
                 action_code=code, detail=detail, side_effects=True,
                 payload={"track": ctrl.current_track, "answer": detail})
+        except MediaError:
+            # No music available (empty directory or no player binary). This is
+            # a normal, expected situation -- not an error -- so the assistant
+            # acknowledges the command and plays the canned "play music" reply
+            # instead of falling through to the generic "Sorry, that didn't
+            # work." apology.
+            return ExecutionResult(
+                ok=True, intent=req.intent, category=self.category,
+                action_code=code,
+                detail="I couldn't find any music to play right now.",
+                side_effects=False,
+                payload={"track": None,
+                         "answer": "I couldn't find any music to play right now."})
         except Exception as exc:  # noqa: BLE001
             return ExecutionResult(
                 ok=False, intent=req.intent, category=self.category,

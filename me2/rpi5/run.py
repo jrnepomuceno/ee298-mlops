@@ -527,7 +527,12 @@ def main() -> int:
                 # runtime (clock, live weather, reminder list), so it must be
                 # synthesized from text rather than played from a static WAV.
                 # Everything else keeps the pre-baked reply WAV.
-                _dynamic_intents = ("what_time", "what_weather", "what_reminders")
+                # pause_music / stop_music are dynamic too: the spoken line
+                # depends on whether music is actually playing ("No music is
+                # playing." vs "Paused X" / "Stopped the music"), so it must be
+                # synthesised from the live reply rather than a static WAV.
+                _dynamic_intents = ("what_time", "what_weather", "what_reminders",
+                                    "pause_music", "stop_music")
                 if result.get("intent") in _dynamic_intents and piper_tts:
                     # Prefer the facade/live reply already computed during
                     # infer_command (it carries the real weather line / clock /
