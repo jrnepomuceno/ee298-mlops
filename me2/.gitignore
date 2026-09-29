@@ -13,6 +13,14 @@ checkpoints/
 data/mels/
 *.log
 
+# ONNX ground truth: the committed deployable for m4 / daniel-pc / pi.
+# Carve the versioned models/onnx/ tree back out of the *.onnx ignore so
+# every machine pulls the exact same artifact + provenance manifest.json.
+!models/onnx/
+!models/onnx/**/
+!models/onnx/**/*.onnx
+!models/onnx/**/*.json
+
 # Editors / OS
 .DS_Store
 .idea/

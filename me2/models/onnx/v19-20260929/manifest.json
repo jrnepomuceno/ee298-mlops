@@ -1,0 +1,83 @@
+{
+  "tag": "v19-20260929",
+  "created_utc": "2026-09-29T01:29:32+00:00",
+  "schema": {
+    "num_intents": 19,
+    "intents": [
+      "turn_on_lights",
+      "turn_off_lights",
+      "dim_lights",
+      "set_temperature",
+      "play_music",
+      "pause_music",
+      "stop_music",
+      "set_timer",
+      "set_alarm",
+      "stop_timer",
+      "remind",
+      "call",
+      "what_time",
+      "what_weather",
+      "what_reminders",
+      "volume_up",
+      "volume_down",
+      "mute",
+      "oov"
+    ],
+    "ctc_vocab_size": 88,
+    "n_mels": 80,
+    "sample_rate": 16000
+  },
+  "source_checkpoint": {
+    "path": "/tmp/vcm_smoke_run3/pi5-vcm-best.pt",
+    "sha256": "73c2bfb3ba343681b809de1ac0f3b1fa8ad4e9db56eaf1c99df9c6d8340800be"
+  },
+  "manifest_fingerprint": "e835c3b02dee8b13294cbf3505bce279059d6bad3fc31464a42c4f72b25aa8d2",
+  "training": {
+    "device": "cpu",
+    "noise_snr": 15.0,
+    "noise_dir": null,
+    "args": {
+      "epochs": 1,
+      "batch_size": 32,
+      "lr": 0.0003,
+      "dropout": 0.3,
+      "model_size": "baseline",
+      "amp": false,
+      "seed": 42
+    }
+  },
+  "export": {
+    "opset": 11,
+    "quant_scheme": "dynamic",
+    "weight_type": "QInt8",
+    "activation_type": "fp32",
+    "fp32_file": "vcm_model.onnx",
+    "int8_file": "vcm_model_int8.onnx"
+  },
+  "metrics": {
+    "train": {
+      "loss": 8.75257,
+      "acc": 0.13937
+    },
+    "val": {
+      "loss": 6.36212,
+      "acc": 0.14,
+      "macro_f1": 0.01293,
+      "wer": 1.0
+    },
+    "test": {
+      "loss": 6.26352,
+      "acc": 0.15,
+      "macro_f1": 0.01373,
+      "wer": 1.0,
+      "cer": 1.0,
+      "exact_match": 0.0
+    }
+  },
+  "versions": {
+    "torch": "2.14.0",
+    "onnx": "1.23.0",
+    "onnxruntime": "1.30.0"
+  }
+}

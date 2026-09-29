@@ -28,6 +28,12 @@ from .volume import VolumeController
 from .media import MediaPlayerController
 from .wakeword import OpenWakeWordDetector
 
+try:  # torch-free ONNX ground-truth resolver (lives at project root)
+    from model.onnx_deploy import DEFAULT_ONNX_DIR, resolve_latest_onnx
+except ImportError:  # pragma: no cover - run.py executed standalone
+    DEFAULT_ONNX_DIR = None
+    resolve_latest_onnx = None
+
 
 LOGGER = logging.getLogger("pi5-vcm")
 WILLEN_RULE = (Path.home() / ".config" / "wireplumber" / "wireplumber.conf.d"
@@ -97,8 +103,11 @@ def parse_args() -> argparse.Namespace:
     source.add_argument("--vcm-only", action="store_true",
                         help="test VCM directly without a wakeword")
     model = parser.add_argument_group("model")
-    model.add_argument("--checkpoint", default="vcm_model_int8.onnx",
-                       help="VCM ONNX model (default: vcm_model_int8.onnx)")
+    _gt = (resolve_latest_onnx(DEFAULT_ONNX_DIR, "int8")
+           if resolve_latest_onnx is not None else None)
+    _ckpt_default = str(_gt) if _gt else "vcm_model_int8.onnx"
+    model.add_argument("--checkpoint", default=_ckpt_default,
+                       help="VCM ONNX model (default: newest models/onnx/<tag>/vcm_model_int8.onnx)")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")

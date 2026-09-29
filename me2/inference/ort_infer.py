@@ -45,6 +45,7 @@ if str(ROOT) not in sys.path:
 
 import config  # noqa: E402
 from model.slots import parse_slots  # noqa: E402  (torch-free leaf module)
+from model.onnx_deploy import (DEFAULT_ONNX_DIR, resolve_latest_onnx)  # noqa: E402
 try:
     from .features import kaldi_fbank, load_wav_mono, synthesize_utterance  # noqa: E402
 except ImportError:  # direct script run (python inference/ort_infer.py)
@@ -191,8 +192,10 @@ def warmup(session, n: int = 3) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Pi5-VCM on-device inference (input: vcm_model_int8.onnx).")
-    ap.add_argument("--checkpoint", default="../vcm_model_int8.onnx",
-                    help="path to the ONNX model (default: ../vcm_model_int8.onnx)")
+    _default_ckpt = resolve_latest_onnx(DEFAULT_ONNX_DIR, "int8")
+    _default_ckpt = str(_default_ckpt) if _default_ckpt else "../vcm_model_int8.onnx"
+    ap.add_argument("--checkpoint", default=_default_ckpt,
+                    help="path to the ONNX model (default: newest models/onnx/<tag>/vcm_model_int8.onnx)")
     ap.add_argument("--input", help="path to a 16 kHz mono wav file")
     ap.add_argument("--self-test", action="store_true",
                     help="run built-in synthetic utterances (no wav needed)")

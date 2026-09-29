@@ -35,6 +35,8 @@ from model.dataset import (VCMDataset, build_synthetic_manifest, load_manifest,
 from model.dataloader import make_dataloader
 from model.model import VCM, ctc_decode_batch, parse_slots
 from model.train import test, train_one_epoch, validate
+from model.onnx_deploy import (DEFAULT_ONNX_DIR, package_model,
+                               next_version_tag)
 from utils import audio_utils
 from utils.model_utils import (get_device, load_checkpoint, save_checkpoint,
                                set_seed)
@@ -124,6 +126,14 @@ def parse_args() -> argparse.Namespace:
                    help="tee training output to this file")
     p.add_argument("--output-dir", type=str, default=None,
                    help="directory for training checkpoints and history")
+    p.add_argument("--onnx-export", action="store_true",
+                   help="after training, export FP32+int8 ONNX to the git-tracked models/onnx/<tag>/ ground-truth folder")
+    p.add_argument("--onnx-dir", type=str, default=None,
+                   help=f"ONNX ground-truth root (default: {DEFAULT_ONNX_DIR})")
+    p.add_argument("--version-tag", type=str, default=None,
+                   help="ONNX version tag (default: auto v{num_intents}-{YYYYMMDD})")
+    p.add_argument("--onnx-opset", type=int, default=11,
+                   help="ONNX opset for the export (default 11)")
     return p.parse_args()
 
 
@@ -142,7 +152,7 @@ def get_split_loaders(args, device) -> tuple:
 
     train_s, val_s, test_s = split_samples(samples, seed=args.seed)
     print(f"[data] train={len(train_s)} val={len(val_s)} test={len(test_s)}")
-    mels_fingerprint = manifest_fingerprint(samples) if args.mels_dir else None
+    mels_fingerprint = manifest_fingerprint(samples)
 
     train_ds = VCMDataset(train_s, max_frames=args.max_frames, augment=True,
                           mels_dir=args.mels_dir, split="train",
@@ -209,6 +219,9 @@ def cmd_train(args) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     train_loader, val_loader, test_loader, _test_ds = get_split_loaders(args, device)
+    # Manifest fingerprint for provenance: stamped into checkpoints and the
+    # ONNX manifest.json so every machine can verify the training data match.
+    mels_fingerprint = manifest_fingerprint(load_manifest(Path(args.manifest)))
     model = build_model(args, device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
@@ -264,11 +277,13 @@ def cmd_train(args) -> None:
         if val_m["loss"] < best_val:
             best_val = val_m["loss"]
             save_checkpoint(output_dir / BEST_CHECKPOINT, model, optimizer, epoch,
-                            {"val": val_m, "train": train_m}, args)
+                            {"val": val_m, "train": train_m}, args,
+                            manifest_fingerprint=mels_fingerprint)
             print(f"[ckpt] saved {BEST_CHECKPOINT} (val_loss={best_val:.4f})")
 
     save_checkpoint(output_dir / LAST_CHECKPOINT, model, optimizer, end_epoch,
-                    {"val": val_m, "train": train_m}, args)
+                    {"val": val_m, "train": train_m}, args,
+                    manifest_fingerprint=mels_fingerprint)
     with open(output_dir / HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2)
     print(f"[train] done. history -> {output_dir / HISTORY_FILE}")
@@ -290,6 +305,56 @@ def cmd_train(args) -> None:
     print(f"test_cer    : {test_metrics['cer']:.4f}")
     print(f"test_exact  : {test_metrics['exact_match']:.4f}")
     print(f"total_seconds: {total_seconds:.2f}")
+
+    if args.onnx_export:
+        _package_onnx(args, output_dir, mels_fingerprint, device, train_m,
+                      val_m, test_metrics)
+
+
+def _package_onnx(args, output_dir, mels_fingerprint, device,
+                  train_m, val_m, test_metrics) -> None:
+    """Export the trained model to the git-tracked ONNX ground truth.
+
+    Writes models/onnx/<tag>/{vcm_model.onnx, vcm_model_int8.onnx,
+    manifest.json}. The manifest records provenance (checkpoint hash,
+    manifest fingerprint, schema, metrics) so every machine can verify it
+    is running the intended model. Commit the folder to publish it.
+    """
+    onnx_dir = Path(args.onnx_dir) if args.onnx_dir else DEFAULT_ONNX_DIR
+    tag = args.version_tag or next_version_tag(onnx_dir)
+    best_ckpt = output_dir / BEST_CHECKPOINT
+    metrics = {
+        "train": {"loss": round(float(train_m["loss"]), 5),
+                   "acc": round(float(train_m["acc"]), 5)},
+        "val": {"loss": round(float(val_m["loss"]), 5),
+                 "acc": round(float(val_m["accuracy"]), 5),
+                 "macro_f1": round(float(val_m["macro_f1"]), 5),
+                 "wer": round(float(val_m["wer"]), 5)},
+        "test": {"loss": round(float(test_metrics["loss"]), 5),
+                  "acc": round(float(test_metrics["accuracy"]), 5),
+                  "macro_f1": round(float(test_metrics["macro_f1"]), 5),
+                  "wer": round(float(test_metrics["wer"]), 5),
+                  "cer": round(float(test_metrics["cer"]), 5),
+                  "exact_match": round(float(test_metrics["exact_match"]), 5)},
+    }
+    extra_args = {k: getattr(args, k, None) for k in
+                  ("epochs", "batch_size", "lr", "dropout",
+                   "model_size", "amp", "seed")}
+    version_dir = package_model(
+        best_ckpt,
+        onnx_dir=onnx_dir,
+        tag=tag,
+        opset=args.onnx_opset,
+        manifest_fingerprint=mels_fingerprint,
+        metrics=metrics,
+        noise_snr=args.noise_snr,
+        noise_dir=args.noise_dir,
+        device=str(device),
+        extra_args=extra_args,
+    )
+    print(f"[onnx] ground truth ready: {version_dir}")
+    print(f"[onnx] to publish for all machines: git add {version_dir} "
+          "&& git commit && git push")
 
 
 def _load_model_for_eval(args, device) -> VCM:

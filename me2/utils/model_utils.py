@@ -25,7 +25,8 @@ def get_device(device: str = "auto") -> torch.device:
     return torch.device("cpu")
 
 
-def save_checkpoint(path, model, optimizer, epoch, metrics, args=None) -> None:
+def save_checkpoint(path, model, optimizer, epoch, metrics, args=None,
+                    manifest_fingerprint: str | None = None) -> None:
     payload = {
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict() if optimizer is not None else None,
@@ -38,6 +39,7 @@ def save_checkpoint(path, model, optimizer, epoch, metrics, args=None) -> None:
             "intents": config.INTENTS,
             "ctc_vocab": config.CTC_VOCAB,
             "args": vars(args) if args is not None else None,
+            "manifest_fingerprint": manifest_fingerprint,
         },
     }
     torch.save(payload, str(path))

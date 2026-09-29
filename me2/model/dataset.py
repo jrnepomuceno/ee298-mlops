@@ -70,6 +70,12 @@ TEMPLATES: list[tuple[str, list[str]]] = [
     ("what_weather", ["what is the weather", "what is the weather like",
                       "how is the weather"]),
     ("what_reminders", ["what are my reminders", "show my reminders"]),
+    ("volume_up", ["turn up the volume", "volume up", "turn the volume up",
+                   "increase the volume", "louder please"]),
+    ("volume_down", ["turn down the volume", "volume down", "turn the volume down",
+                     "decrease the volume", "quieter please"]),
+    ("mute", ["mute the volume", "mute it", "turn off the sound",
+              "silence the speaker", "mute please"]),
 ]
 
 # Out-of-vocabulary utterances: the model should label these "oov".

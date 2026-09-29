@@ -47,6 +47,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import config  # noqa: E402
+from model.onnx_deploy import (DEFAULT_ONNX_DIR, resolve_latest_onnx)  # noqa: E402
 
 SR = config.SAMPLE_RATE
 N_MELS = config.N_MELS
@@ -320,7 +321,9 @@ def run_wavs(sess, in_name, args):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default=str(ROOT / "vcm_model_int8.onnx"))
+    _default_model = resolve_latest_onnx(DEFAULT_ONNX_DIR, "int8")
+    _default_model = str(_default_model) if _default_model else str(ROOT / "vcm_model_int8.onnx")
+    ap.add_argument("--model", default=_default_model)
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--n-runs", type=int, default=50)
     ap.add_argument("--warmup", type=int, default=10)
