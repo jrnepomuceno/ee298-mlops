@@ -211,7 +211,7 @@ def cmd_train(args) -> None:
     set_seed(args.seed)
     # Fast FP32 matmuls on Ampere+ (3060 Ti): TF32 speeds up the conv/GRU GEMMs
     # in the non-autocast path with negligible accuracy impact for this task.
-    if device.type == "cuda" and torch.backends.cuda.is_available():
+    if device.type == "cuda" and torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
     print(f"[train] device={device}")
