@@ -266,6 +266,27 @@ def main() -> int:
         # A countdown timer and a wall-clock alarm both land here; branch on the
         # state type to pick the right WAV and spoken line.
         from .timer import AlarmState
+
+        def _expiry_play(play_fn, path, kind):
+            # Duck the master volume under the ring/speech so the mic can still
+            # hear the wake word (Echo-style), then restore. Self-contained so
+            # the timer thread never depends on the mic-loop closures.
+            ctrl = volume_controller
+            if ctrl is not None:
+                try:
+                    ctrl.duck()
+                except Exception:  # noqa: BLE001
+                    log(f"[{kind}] duck failed; playing at full volume",
+                        error=True)
+            try:
+                play_fn(path)
+            finally:
+                if ctrl is not None:
+                    try:
+                        ctrl.unduck()
+                    except Exception:  # noqa: BLE001
+                        log(f"[{kind}] unduck failed", error=True)
+
         if isinstance(state, AlarmState):
             kind = "alarm"
             log(f"[alarm] ringing id={state.alarm_id} time={state.time}")
@@ -279,7 +300,7 @@ def main() -> int:
             speech_text = "Your timer is up."
         try:
             if wav_player is not None:
-                wav_player.play(wav_path)
+                _expiry_play(wav_player.play, wav_path, kind)
         except Exception:  # noqa: BLE001
             log(f"[{kind}] expiry beep failed", exc_info=True)
         try:
@@ -287,7 +308,7 @@ def main() -> int:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                     tmp_path = tmp.name
                 piper_tts.synthesize(speech_text, tmp_path)
-                wav_player.play(tmp_path)
+                _expiry_play(wav_player.play, tmp_path, kind)
         except Exception:  # noqa: BLE001
             log(f"[{kind}] expiry speech failed", exc_info=True)
 
@@ -463,6 +484,32 @@ def main() -> int:
                 current_event["action"] = action
                 return action
 
+            def _ducked_play(play_fn, *, kind: str):
+                """Play ``play_fn()`` with the output ducked underneath.
+
+                Mirrors real Echo/Alexa behaviour: while the assistant is
+                producing audio (a spoken reply, an alarm, a timer ding) the
+                master volume dips to :data:`DUCK_LEVEL` so the microphone can
+                still catch the wake word, then returns to the pre-play level.
+                Fail-soft -- if ducking is unavailable the audio still plays at
+                full volume rather than failing.
+                """
+                ctrl = volume_controller
+                if ctrl is not None:
+                    try:
+                        ctrl.duck()
+                    except Exception:  # noqa: BLE001
+                        log(f"[{kind}] duck failed; playing at full volume",
+                            error=True)
+                try:
+                    return play_fn()
+                finally:
+                    if ctrl is not None:
+                        try:
+                            ctrl.unduck()
+                        except Exception:  # noqa: BLE001
+                            log(f"[{kind}] unduck failed", error=True)
+
             def play_reply(result, action):
                 # Dynamic (Piper TTS) intents: the spoken value is computed at
                 # runtime (clock, live weather, reminder list), so it must be
@@ -485,7 +532,8 @@ def main() -> int:
                     temp.close()
                     try:
                         piper_tts.synthesize(reply_text, temp.name)
-                        current_event["tts"] = wav_player.play(temp.name)
+                        current_event["tts"] = _ducked_play(
+                            lambda: wav_player.play(temp.name), kind="tts")
                         current_event["tts"]["source"] = "piper"
                         current_event["tts"]["text"] = reply_text
                     finally:
@@ -496,7 +544,8 @@ def main() -> int:
                 wav_path = Path(args.reply_dir) / wav_name
                 if not wav_path.exists():
                     raise FileNotFoundError(f"reply WAV not found: {wav_path}")
-                current_event["tts"] = wav_player.play(str(wav_path))
+                current_event["tts"] = _ducked_play(
+                    lambda: wav_player.play(str(wav_path)), kind="tts")
 
             def play_ack():
                 if args.no_ack:

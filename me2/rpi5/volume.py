@@ -31,6 +31,15 @@ LOGGER = logging.getLogger("pi5-vcm.volume")
 STEP_PERCENT = 10
 MIN_LEVEL = 0
 MAX_LEVEL = 100
+#: Safe ceiling for the "unknown level" fallbacks (unmute / duck with no
+#: captured level). We never jump straight to a full-scale 100% when we do not
+#: know the prior level -- that is what caused the "volume snapped to max"
+#: surprise at demo end.
+SAFE_FALLBACK_LEVEL = 50
+#: Level the output is ducked to while the assistant is producing audio
+#: (speaking, music, an alarm/timer ring) so the microphone can still catch
+#: the wake word -- the same trick real Echo/Alexa devices use.
+DUCK_LEVEL = 50
 
 
 def _clamp(level: int) -> int:
@@ -80,6 +89,7 @@ class VolumeController:
         self._set_override = set
         self._captured: int | None = None
         self._restored = False
+        self._ducked: int | None = None
 
     # ------------------------------------------------------------------ #
     # Backend plumbing (real hardware)
@@ -170,11 +180,47 @@ class VolumeController:
     def unmute(self) -> int:
         """Return the output to the last known non-zero level.
 
-        Falls back to the pre-demo snapshot if no other level is remembered.
+        Falls back to the pre-demo snapshot if no other level is remembered,
+        and to :data:`SAFE_FALLBACK_LEVEL` (50%) if even that is missing --
+        never a full-scale jump to 100%.
         """
-        target = self._captured if self._captured is not None else MAX_LEVEL
+        target = self._captured if self._captured is not None else SAFE_FALLBACK_LEVEL
         self.set(target)
         return target
+
+    def duck(self) -> int:
+        """Lower the output to :data:`DUCK_LEVEL` while audio is playing.
+
+        Remember the current level so :meth:`unduck` can bring it back.
+        Calling :meth:`duck` twice in a row remembers only the *first*
+        (higher) level, so a nested play never compounds the dip. Returns the
+        level actually applied. Fail-soft: if the level cannot be read, it
+        simply applies the duck level without a restore target.
+        """
+        if self._ducked is None:
+            try:
+                self._ducked = self.get()
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("[volume] duck: could not read level: %s", exc)
+                self._ducked = SAFE_FALLBACK_LEVEL
+        applied = self.set(DUCK_LEVEL)
+        LOGGER.info("[volume] ducked to %s%% (was %s%%)", applied, self._ducked)
+        return applied
+
+    def unduck(self) -> int | None:
+        """Bring the output back from a :meth:`duck`.
+
+        Restores the level remembered by the most recent :meth:`duck`.
+        Returns the restored level, or ``None`` if nothing was ducked (so a
+        stray :meth:`unduck` is a harmless no-op).
+        """
+        if self._ducked is None:
+            LOGGER.debug("[volume] unduck with nothing ducked; no-op")
+            return None
+        restored = self.set(self._ducked)
+        LOGGER.info("[volume] unducked back to %s%%", restored)
+        self._ducked = None
+        return restored
 
     def restore(self) -> bool:
         """Restore the pre-demo volume. Idempotent; safe to call repeatedly."""
@@ -186,6 +232,7 @@ class VolumeController:
         try:
             self._set_level(self._captured)
             self._restored = True
+            self._ducked = None  # a duck is meaningless once the demo is over
             LOGGER.info("[volume] restored pre-demo level=%s%%", self._captured)
             return True
         except Exception as exc:  # noqa: BLE001
