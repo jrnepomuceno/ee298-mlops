@@ -460,16 +460,30 @@ def main() -> int:
                 return action
 
             def play_reply(result, action):
-                if result.get("intent") == "what_time" and piper_tts:
-                    reply_text = build_reply(result, action)["text"]
+                # Dynamic (Piper TTS) intents: the spoken value is computed at
+                # runtime (clock, live weather, reminder list), so it must be
+                # synthesized from text rather than played from a static WAV.
+                # Everything else keeps the pre-baked reply WAV.
+                _dynamic_intents = ("what_time", "what_weather", "what_reminders")
+                if result.get("intent") in _dynamic_intents and piper_tts:
+                    # Prefer the facade/live reply already computed during
+                    # infer_command (it carries the real weather line / clock /
+                    # reminder list). Fall back to the static template only if
+                    # no live reply text was produced.
+                    reply_text = ""
+                    if isinstance(current_event.get("reply"), dict):
+                        reply_text = str(current_event["reply"].get("text") or "")
+                    if not reply_text:
+                        reply_text = build_reply(result, action)["text"]
                     temp = tempfile.NamedTemporaryFile(
-                        prefix="pi5-vcm-time-", suffix=".wav", delete=False
+                        prefix="pi5-vcm-dyn-", suffix=".wav", delete=False
                     )
                     temp.close()
                     try:
                         piper_tts.synthesize(reply_text, temp.name)
                         current_event["tts"] = wav_player.play(temp.name)
                         current_event["tts"]["source"] = "piper"
+                        current_event["tts"]["text"] = reply_text
                     finally:
                         os.unlink(temp.name)
                     return
