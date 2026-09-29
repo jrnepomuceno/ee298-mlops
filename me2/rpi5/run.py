@@ -592,13 +592,19 @@ def main() -> int:
                 log_debug("wake_detected")
                 if detector is None:
                     return
+                # Clear the wake detector BEFORE acknowledging. The detector
+                # keeps a rolling buffer of the audio that just triggered it
+                # (the user's own "Alexa"); if we ack first and the state
+                # machine early-returns (already LISTENING), that buffer would
+                # linger and re-latch on the next window, firing a spurious
+                # second wake ("two Alexas"). Resetting first guarantees every
+                # wake -- including a re-wake mid-listen -- starts clean.
+                detector.reset()
                 log("[acknowledging] acknowledgement playback skipped"
                     if args.no_ack else "[acknowledging] playing acknowledgement")
                 machine.acknowledge_wake()
                 log("[listening] acknowledgement complete")
                 log_debug("listening_entered")
-
-                detector.reset()
 
             try:
                 for wav in microphone_utterances(

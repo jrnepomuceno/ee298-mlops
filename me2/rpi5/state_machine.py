@@ -63,14 +63,19 @@ class HarnessStateMachine:
 
 
     def acknowledge_wake(self) -> None:
-        """Enter LISTENING after the wake acknowledgement has completed.
+        """Enter (or re-enter) LISTENING after the wake acknowledgement.
 
         Stamps the new interaction's generation so a later :meth:`handle_command`
         can tell a fresh command apart from a stale one captured by an
         overlapping wake.
+
+        Deliberately NOT guarded on STANDBY: a user may re-say the wake word
+        while already LISTENING (impatient, or the first capture timed out).
+        Re-stamping the generation on every wake is what invalidates any stale
+        command from the previous interaction and keeps the interaction count
+        at one. The wake detector itself is cleared by the caller before this
+        runs, so a re-wake cannot cascade into a spurious third wake.
         """
-        if self.state is not State.STANDBY:
-            return
         self._set_state(State.WAKE)
         self._set_state(State.ACKNOWLEDGING)
         self.play_ack()

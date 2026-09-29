@@ -89,15 +89,24 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(calls.count("reply"), 1)
         self.assertEqual(calls.count("infer:b'audio'"), 1)
 
-    def test_acknowledge_wake_is_ignored_while_busy(self):
+    def test_rewake_resets_generation_and_reenters_listening(self):
+        # Regression: "two Alexas speaking". A user re-saying the wake word
+        # while already LISTENING must NOT be swallowed by a STANDBY guard
+        # (which previously left the wake detector's buffer uncleared and let
+        # it re-latch into a spurious second wake). Every wake re-enters
+        # LISTENING and bumps the generation, invalidating any stale command.
         machine, rgb, calls = self.make_machine()
-        machine.state = State.PROCESSING
+        machine.acknowledge_wake()                      # gen 1, -> LISTENING
+        first_gen = machine.current_generation()
 
-        machine.acknowledge_wake()
+        # Re-wake while still LISTENING (no return to STANDBY).
+        machine.acknowledge_wake()                      # gen 2, -> LISTENING
 
-        self.assertEqual(machine.state, State.PROCESSING)
-        self.assertEqual(rgb.calls, [])
-        self.assertEqual(calls, [])
+        self.assertEqual(machine.state, State.LISTENING)
+        self.assertNotEqual(first_gen, machine.current_generation())
+        # The ack beep + RGB cue fire for the re-wake too.
+        self.assertEqual(calls.count("ack"), 2)
+        self.assertEqual(rgb.calls.count("wake"), 2)
 
     def test_dispatcher_handles_partial_inference_results(self):
         dispatcher = DryRunDispatcher()
