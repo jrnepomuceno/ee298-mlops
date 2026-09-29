@@ -1,0 +1,199 @@
+{
+  "tag": "v19-20260929-2",
+  "created_utc": "2026-09-29T09:06:41+00:00",
+  "schema": {
+    "num_intents": 19,
+    "intents": [
+      "turn_on_lights",
+      "turn_off_lights",
+      "dim_lights",
+      "set_temperature",
+      "play_music",
+      "pause_music",
+      "stop_music",
+      "set_timer",
+      "set_alarm",
+      "stop_timer",
+      "remind",
+      "call",
+      "what_time",
+      "what_weather",
+      "what_reminders",
+      "volume_up",
+      "volume_down",
+      "mute",
+      "oov"
+    ],
+    "ctc_vocab_size": 88,
+    "n_mels": 80,
+    "sample_rate": 16000
+  },
+  "source_checkpoint": {
+    "path": "C:\\Users\\jdrne\\TrainingGround\\checkpoints_19int\\pi5-vcm-best.pt",
+    "sha256": "6fc5c0603e09d53900b8c3eee5ce764334dd65db2ef717dff54b892df1d331d9"
+  },
+  "manifest_fingerprint": "f51957c7624f473098cd0c397671626ce04f0ff9929bdf1449dc76f6bd6fd6f7",
+  "training": {
+    "device": "cuda",
+    "noise_snr": 15.0,
+    "noise_dir": "C:\\Users\\jdrne\\TrainingGround\\datasets\\voice_dataset\\background_noise",
+    "args": {
+      "epochs": 50,
+      "batch_size": 64,
+      "lr": 0.0003,
+      "dropout": 0.3,
+      "model_size": "large",
+      "amp": true,
+      "seed": 42,
+      "best_epoch": 45,
+      "note": "Track B 19-intent, 50ep CUDA, best val_loss@ep45"
+    }
+  },
+  "export": {
+    "opset": 11,
+    "quant_scheme": "dynamic",
+    "weight_type": "QInt8",
+    "activation_type": "fp32",
+    "fp32_file": "vcm_model.onnx",
+    "int8_file": "vcm_model_int8.onnx"
+  },
+  "metrics": {
+    "val": {
+      "loss": 0.5114305925913183,
+      "accuracy": 0.9445744369698742,
+      "macro_f1": 0.9448530200611539,
+      "per_intent": {
+        "turn_on_lights": {
+          "precision": 0.9628,
+          "recall": 0.9409,
+          "f1": 0.9517,
+          "support": 440
+        },
+        "turn_off_lights": {
+          "precision": 0.9408,
+          "recall": 0.939,
+          "f1": 0.9399,
+          "support": 508
+        },
+        "dim_lights": {
+          "precision": 0.9543,
+          "recall": 0.9447,
+          "f1": 0.9495,
+          "support": 199
+        },
+        "set_temperature": {
+          "precision": 1.0,
+          "recall": 0.9897,
+          "f1": 0.9948,
+          "support": 195
+        },
+        "play_music": {
+          "precision": 0.8657,
+          "recall": 0.9038,
+          "f1": 0.8843,
+          "support": 478
+        },
+        "pause_music": {
+          "precision": 0.9351,
+          "recall": 0.96,
+          "f1": 0.9474,
+          "support": 75
+        },
+        "stop_music": {
+          "precision": 0.9857,
+          "recall": 0.9765,
+          "f1": 0.9811,
+          "support": 425
+        },
+        "set_timer": {
+          "precision": 0.9933,
+          "recall": 0.9867,
+          "f1": 0.99,
+          "support": 450
+        },
+        "set_alarm": {
+          "precision": 0.9867,
+          "recall": 0.9666,
+          "f1": 0.9766,
+          "support": 539
+        },
+        "stop_timer": {
+          "precision": 0.7778,
+          "recall": 0.9333,
+          "f1": 0.8485,
+          "support": 15
+        },
+        "remind": {
+          "precision": 0.9842,
+          "recall": 0.9894,
+          "f1": 0.9868,
+          "support": 189
+        },
+        "call": {
+          "precision": 0.9571,
+          "recall": 0.9437,
+          "f1": 0.9504,
+          "support": 71
+        },
+        "what_time": {
+          "precision": 0.9021,
+          "recall": 0.8927,
+          "f1": 0.8974,
+          "support": 289
+        },
+        "what_weather": {
+          "precision": 0.8626,
+          "recall": 0.8818,
+          "f1": 0.8721,
+          "support": 719
+        },
+        "what_reminders": {
+          "precision": 0.9859,
+          "recall": 0.7955,
+          "f1": 0.8805,
+          "support": 88
+        },
+        "volume_up": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 43
+        },
+        "volume_down": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 43
+        },
+        "mute": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "oov": {
+          "precision": 0.9539,
+          "recall": 0.959,
+          "f1": 0.9564,
+          "support": 2072
+        }
+      },
+      "wer": 0.5489946073524743,
+      "cer": 0.5551683013339476,
+      "exact_match": 0.242431640625
+    },
+    "train": {
+      "loss": 0.34469157716710946,
+      "ce": 0.09096513801988991,
+      "ctc": 0.25372635070115324,
+      "acc": 0.9678178963893249,
+      "epoch_seconds": 245.5301194190979
+    }
+  },
+  "versions": {
+    "torch": "2.6.0+cu124",
+    "numpy": "2.5.3",
+    "onnxruntime": "1.30.0",
+    "onnx": "1.23.0"
+  }
+}
