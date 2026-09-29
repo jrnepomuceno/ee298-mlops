@@ -338,7 +338,11 @@ def main() -> int:
         reminder_store = ReminderStore(args.reminders_file)
         if volume_controller is not None:
             volume_controller.begin()  # snapshot pre-demo level for restore
-        pipeline = FacadePipeline(threshold=args.min_confidence, dry_run=True,
+        pipeline = FacadePipeline(threshold=args.min_confidence,
+                                  # Live mode: persist reminders and schedule
+                                  # timers for real. (Was dry_run=True, which
+                                  # made remind/timer confirm but never act.)
+                                  dry_run=False,
                                   weather_fn=weather_fn,
                                   timer_manager=timer_manager,
                                   reminder_store=reminder_store,
