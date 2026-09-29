@@ -91,7 +91,7 @@ def make_weather_fn(location: str | None = None,
         if not key:
             raise RuntimeError("OPENWEATHER_API_KEY is not set")
         data = _fetch_current(loc, key)
-        if data.get("cod") != "200":
+        if data.get("cod") not in (200, "200"):
             message = data.get("message", "unknown error")
             raise RuntimeError(f"weather service error: {message}")
         temp_c = int(round(float(data["main"]["temp"])))
