@@ -46,7 +46,7 @@ class MediaExecutor(Executor):
                 detail = f"Playing {name}"
             elif code == "media.pause":
                 if ctrl.pause():
-                    detail = f"Paused {ctrl.current_track}"
+                    detail = "Music paused"
                 else:
                     detail = "No music is playing."
             elif code == "media.stop":

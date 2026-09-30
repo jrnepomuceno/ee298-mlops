@@ -68,7 +68,7 @@ REPLY_TEXT = {
     "dim_lights":       "Dimming the lights.",
     "set_temperature":  "Setting the temperature.",
     "play_music":       "Playing music.",
-    "pause_music":      "Pausing the music.",
+    "pause_music":      "Music paused.",
     "stop_music":       "Music stopped.",
     # (pause_music / stop_music are now spoken dynamically from the live reply
     #  -- "No music is playing." when idle -- so these canned WAVs are only a
