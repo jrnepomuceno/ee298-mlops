@@ -108,6 +108,8 @@ def parse_args() -> argparse.Namespace:
     _ckpt_default = str(_gt) if _gt else "vcm_model_int8.onnx"
     model.add_argument("--checkpoint", default=_ckpt_default,
                        help="VCM ONNX model (default: newest models/onnx/<tag>/vcm_model_int8.onnx)")
+    model.add_argument("--intent-labels", default=None,
+                       help="enable diagnostics-only mode for a single-output intent ONNX and load its label JSON")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")
@@ -262,6 +264,8 @@ def print_microphone_intro(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.intent_labels and not (args.input or args.self_test):
+        raise SystemExit("--intent-labels is diagnostics-only; use --input or --self-test (no microphone/actions)")
     configure_logging()
     sys.excepthook = log_uncaught_exception
     rgb = RgbController(args.rgb_executable)
@@ -448,6 +452,7 @@ def main() -> int:
                                   dialer=dialer)
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
+            intent_labels_path=args.intent_labels,
             device=args.device,
             max_frames=args.max_frames,
             min_confidence=args.min_confidence,

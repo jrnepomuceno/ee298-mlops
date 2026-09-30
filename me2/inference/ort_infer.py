@@ -143,9 +143,29 @@ def run_utterance(session, wav: np.ndarray, max_frames: int,
     x = mel[np.newaxis, :, :].astype(np.float32)   # (1, T, 80)
 
     t0 = time.perf_counter()
-    intent_logits, ctc_logits = session.run(None, {"mels": x})
+    outputs = session.run(None, {"mels": x})
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
+    if len(outputs) == 1:
+        intent_logits = outputs[0]
+        if intent_logits.ndim != 2 or intent_logits.shape[-1] != len(intents):
+            raise ValueError(
+                "intent-only ONNX output dimension does not match its labels")
+        probs = _softmax(intent_logits[0])
+        top_id = int(np.argmax(probs))
+        return {
+            "intent": intents[top_id],
+            "intent_confidence": round(float(probs[top_id]), 4),
+            "transcript": "",
+            "slots": {},
+            "frames": int(mel.shape[0]),
+            "latency_ms": round(latency_ms, 2),
+            "backend": "intent_only",
+        }
+    if len(outputs) != 2:
+        raise ValueError(f"unsupported ONNX output count: {len(outputs)}")
+
+    intent_logits, ctc_logits = outputs
     probs = _softmax(intent_logits[0])
     top_id = int(np.argmax(probs))
     intent = intents[top_id]

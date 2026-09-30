@@ -61,6 +61,7 @@ ACTION_BY_INTENT = {
 @dataclass(frozen=True)
 class HarnessConfig:
     checkpoint: str = "vcm_model_int8.onnx"
+    intent_labels_path: str | None = None
     device: str = "cpu"
     max_frames: int = 400
     min_confidence: float = 0.75
@@ -173,6 +174,39 @@ class PiHarness:
         self.checkpoint = checkpoint
         self.session, self._in_name, self.intents, self.ctc_vocab = load_session(
             str(checkpoint), config.threads)
+        outputs = self.session.get_outputs()
+        self.intent_only = len(outputs) == 1
+        if self.intent_only:
+            if outputs[0].name != "intent_logits":
+                raise ValueError(
+                    f"unsupported intent-only output: {outputs[0].name}")
+            if config.intent_labels_path is None:
+                raise ValueError(
+                    "intent-only ONNX requires --intent-labels for diagnostics")
+            labels_path = Path(config.intent_labels_path).expanduser()
+            if not labels_path.is_file():
+                raise FileNotFoundError(f"intent labels not found: {labels_path}")
+            label_data = json.loads(labels_path.read_text(encoding="utf-8"))
+            if isinstance(label_data, dict):
+                if label_data.get("task") != "intent_classification_only":
+                    raise ValueError("intent label file has an unsupported task")
+                labels = label_data.get("labels")
+            else:
+                labels = label_data
+            if (not isinstance(labels, list)
+                    or not all(isinstance(label, str) for label in labels)):
+                raise ValueError("intent label file must contain a string label list")
+            output_size = outputs[0].shape[-1]
+            if isinstance(output_size, int) and len(labels) != output_size:
+                raise ValueError(
+                    f"intent label count {len(labels)} does not match model output "
+                    f"size {output_size}")
+            if len(labels) != len(set(labels)):
+                raise ValueError("intent label file contains duplicate labels")
+            self.intents = labels
+            self.ctc_vocab = []
+        elif config.intent_labels_path is not None:
+            raise ValueError("--intent-labels is only for single-output intent models")
         self.dispatcher = dispatcher or DryRunDispatcher()
         self.pipeline = pipeline or FacadePipeline(threshold=config.min_confidence)
         self._warmup()
@@ -200,6 +234,8 @@ class PiHarness:
 
     def recognize_and_act(self, wav: Any, source: str = "microphone") -> OrchestratorResult:
         """Recognize + run the full facade/orchestrator pipeline in one call."""
+        if self.intent_only:
+            raise RuntimeError("intent-only model is diagnostics-only; actions are disabled")
         wav = np.asarray(wav, dtype=np.float32).ravel()
         result = run_utterance(self.session, wav, self.config.max_frames,
                                self.intents, self.ctc_vocab)
@@ -220,7 +256,20 @@ class PiHarness:
 
     def _event(self, source: str, result: dict[str, Any]) -> dict[str, Any]:
         result = {**result, "min_confidence": self.config.min_confidence}
-        action = self.dispatcher.dispatch(result)
+        if self.intent_only:
+            action = {
+                "status": "diagnostic_only",
+                "action": None,
+                "side_effects": False,
+            }
+            reply = {
+                "text": f"Intent-only model predicted {result['intent']}.",
+                "speak": False,
+                "source": "diagnostic",
+            }
+        else:
+            action = self.dispatcher.dispatch(result)
+            reply = build_reply(result, action)
         return {
             "event": "command_processed",
             "request_id": uuid4().hex,
@@ -230,7 +279,7 @@ class PiHarness:
             "checkpoint": str(self.checkpoint),
             "result": result,
             "action": action,
-            "reply": build_reply(result, action),
+            "reply": reply,
         }
 
 

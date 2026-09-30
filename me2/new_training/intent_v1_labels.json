@@ -1,0 +1,23 @@
+{
+  "task": "intent_classification_only",
+  "labels": [
+    "PLAY_MUSIC",
+    "WEATHER",
+    "TIME",
+    "LIGHT_ON",
+    "LIGHT_OFF",
+    "PAUSE",
+    "STOP",
+    "NEXT",
+    "VOLUME_UP",
+    "VOLUME_DOWN",
+    "CALL",
+    "MESSAGE",
+    "LIST_REMINDERS",
+    "TIMER",
+    "ALARM",
+    "TEMPERATURE",
+    "BRIGHTNESS",
+    "CREATE_REMINDER"
+  ]
+}
