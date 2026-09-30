@@ -51,6 +51,9 @@ OUT_DIR = os.path.normpath(os.path.join(HERE, "..", "assets", "replies"))
 
 ESPEAK_VOICE = "en-us"          # single voice for the whole set -> consistency
 ESPEAK_SPEED = 172              # words/minute (default 175); slightly slower = clearer
+REPLY_SYNTHESIS = {
+    "dim_lights": {"espeak_speed": 160, "piper_length_scale": 1.08},
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -65,7 +68,7 @@ ESPEAK_SPEED = 172              # words/minute (default 175); slightly slower = 
 REPLY_TEXT = {
     "turn_on_lights":   "Turning the lights on.",
     "turn_off_lights":  "Turning the lights off.",
-    "dim_lights":       "Dimming the lights.",
+    "dim_lights":       "Dimming lights.",
     "set_temperature":  "Setting the temperature.",
     "play_music":       "Playing music.",
     "pause_music":      "Music paused.",
@@ -194,10 +197,11 @@ def _find_espeak() -> str | None:
     return exe
 
 
-def synth_reply(espeak: str, text: str, dest: str) -> bool:
+def synth_reply(espeak: str, text: str, dest: str,
+                speed: int = ESPEAK_SPEED) -> bool:
     """Synthesise one reply WAV with espeak-ng at the target sample rate."""
     tmp = dest + ".tmp.wav"
-    cmd = [espeak, "-v", ESPEAK_VOICE, "-s", str(ESPEAK_SPEED),
+    cmd = [espeak, "-v", ESPEAK_VOICE, "-s", str(speed),
            "-w", tmp, text]
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL,
@@ -245,10 +249,12 @@ def _find_piper():
     return None
 
 
-def synth_reply_piper(piper_bin, model, text, dest):
+def synth_reply_piper(piper_bin, model, text, dest, length_scale=1.0):
     """Synthesise one reply WAV with Piper. Resamples to SR if needed."""
     tmp = dest + ".tmp.wav"
     cmd = [piper_bin, "--model", model, "--output_file", tmp]
+    if length_scale != 1.0:
+        cmd.extend(["--length_scale", str(length_scale)])
     try:
         subprocess.run(cmd, input=text + "\n", text=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -340,13 +346,18 @@ def main() -> int:
         print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with Piper")
         for intent in sorted(REQUIRED_INTENTS):
             dest = os.path.join(out_dir, f"{intent}.wav")
-            if synth_reply_piper(piper[0], piper[1], REPLY_TEXT[intent], dest):
+            settings = REPLY_SYNTHESIS.get(intent, {})
+            if synth_reply_piper(
+                    piper[0], piper[1], REPLY_TEXT[intent], dest,
+                    length_scale=settings.get("piper_length_scale", 1.0)):
                 print(f"  wrote {os.path.basename(dest)}")
     elif espeak is not None:
         print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with espeak-ng")
         for intent in sorted(REQUIRED_INTENTS):
             dest = os.path.join(out_dir, f"{intent}.wav")
-            if synth_reply(espeak, REPLY_TEXT[intent], dest):
+            settings = REPLY_SYNTHESIS.get(intent, {})
+            if synth_reply(espeak, REPLY_TEXT[intent], dest,
+                           speed=settings.get("espeak_speed", ESPEAK_SPEED)):
                 print(f"  wrote {os.path.basename(dest)}")
     else:
         print("WARNING: neither Piper nor espeak-ng found; skipping spoken replies.")
