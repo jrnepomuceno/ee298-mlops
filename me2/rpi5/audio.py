@@ -5,11 +5,12 @@ from collections import deque
 from contextlib import closing
 from dataclasses import dataclass
 from queue import Queue
+import math
 import shutil
 import subprocess
 import time
 from datetime import datetime
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import numpy as np
 
@@ -97,6 +98,37 @@ class EnergyVAD:
         return bool(self._frames)
 
 
+def drain_until_quiet(get_frame: Callable[[], np.ndarray], settings: VADConfig,
+                      min_s: float = 0.0, max_s: float = 3.0) -> None:
+    """Discard capture frames until the room is quiet or the drain is bounded.
+
+    The frame cap keeps this safe with non-blocking test sources; the deadline
+    bounds real capture sources whose reads block for one audio frame.
+    """
+    frame_ms = max(1, settings.frame_ms)
+    minimum_frames = math.ceil(max(0.0, min_s) * 1000.0 / frame_ms)
+    maximum_frames = max(
+        minimum_frames,
+        math.ceil(max(0.0, max_s) * 1000.0 / frame_ms)
+        + settings.silence_frames,
+    )
+    deadline = time.monotonic() + max(0.0, max_s)
+    quiet_frames = 0
+
+    for frame_index in range(maximum_frames):
+        if frame_index >= minimum_frames and time.monotonic() >= deadline:
+            return
+        frame = np.asarray(get_frame(), dtype=np.float32).reshape(-1)
+        rms = float(np.sqrt(np.mean(frame * frame))) if frame.size else 0.0
+        if rms < settings.stop_rms:
+            quiet_frames += 1
+        else:
+            quiet_frames = 0
+        if (frame_index + 1 >= minimum_frames
+                and quiet_frames >= settings.silence_frames):
+            return
+
+
 def microphone_utterances(config: VADConfig | None = None,
                           wakeword: Any | None = None,
                           on_wake: Any | None = None,
@@ -105,6 +137,7 @@ def microphone_utterances(config: VADConfig | None = None,
                           tts_active: Any | None = None,
                           post_reply_gate: Any | None = None,
                           cooldown_s: float = 1.5,
+                          max_drain_s: float = 3.0,
                           command_timeout_s: float = 7.0,
                           wake_only: bool = False) -> Iterator[np.ndarray]:
     """Yield utterances from the default microphone until interrupted.
@@ -226,12 +259,11 @@ def microphone_utterances(config: VADConfig | None = None,
                 wakeword_active = wakeword is None
                 speech_announced = False
                 yield utterance
-                # TTS can be audible to the microphone. Discard frames queued
-                # during playback and give the room time to become quiet.
-                if cooldown_s > 0:
-                    deadline = time.monotonic() + cooldown_s
-                    while time.monotonic() < deadline:
-                        discard_frame()
+                # Drain the reply and its room echo rather than relying on a
+                # fixed cooldown that may expire while the assistant is still
+                # audible to the microphone.
+                drain_until_quiet(discard_frame, settings,
+                                  min_s=cooldown_s, max_s=max_drain_s)
                 vad.reset()
                 if wakeword is not None and hasattr(wakeword, "reset"):
                     wakeword.reset()
