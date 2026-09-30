@@ -12,7 +12,7 @@ import unittest
 from datetime import timedelta
 
 from rpi5.facade import decode
-from rpi5.timer import TimerManager
+from rpi5.timer import TimerAlarm, TimerManager
 from rpi5.executors.timer import TimerExecutor, _spoken_set
 from rpi5.orchestrator import default_orchestrator
 
@@ -295,6 +295,68 @@ class TimerExpiryTests(unittest.TestCase):
         self.assertEqual(seen["state"].duration, 1.0)
         self.assertEqual(seen["state"].unit, "second")
         mgr.close()
+
+
+class TimerAlarmLoopTests(unittest.TestCase):
+    def test_announces_immediately_and_repeats_until_stopped(self):
+        announcements = []
+        rings = []
+        announced_three = threading.Event()
+
+        def announce():
+            announcements.append("Your timer is up.")
+            if len(announcements) >= 3:
+                announced_three.set()
+
+        alarm = TimerAlarm(lambda: rings.append("ring"), announce,
+                           announce_interval_s=0.03, ring_gap_s=0.001)
+        self.assertTrue(alarm.start())
+        self.assertTrue(announced_three.wait(timeout=1.0))
+        self.assertGreaterEqual(len(rings), 1)
+        self.assertTrue(alarm.stop())
+        self.assertFalse(alarm.active)
+
+    def test_pause_stops_ring_until_resumed(self):
+        rings = []
+        alarm = TimerAlarm(lambda: rings.append("ring"), lambda: None,
+                           announce_interval_s=10, ring_gap_s=0.005)
+        alarm.start()
+        self.assertTrue(alarm.wait_first_ring(timeout=1.0))
+        self.assertTrue(alarm.pause())
+        paused_count = len(rings)
+        time.sleep(0.04)
+        self.assertEqual(len(rings), paused_count)
+        self.assertTrue(alarm.resume())
+        deadline = time.monotonic() + 1.0
+        while len(rings) == paused_count and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertGreater(len(rings), paused_count)
+        alarm.stop()
+
+    def test_stop_is_idempotent(self):
+        alarm = TimerAlarm(lambda: None, lambda: None)
+        self.assertFalse(alarm.stop())
+        self.assertTrue(alarm.start())
+        self.assertTrue(alarm.stop())
+        self.assertFalse(alarm.stop())
+
+
+class TimerExecutorAlarmTests(unittest.TestCase):
+    def test_stop_timer_stops_ringing_after_countdown_has_expired(self):
+        from rpi5.timer import TimerAlarm
+
+        alarm = TimerAlarm(lambda: None, lambda: None, ring_gap_s=0.01)
+        alarm.start()
+        self.assertTrue(alarm.wait_first_ring(timeout=1.0))
+        executor = TimerExecutor(dry_run=False, manager=TimerManager(), alarm=alarm)
+        request = decode("stop_timer", {}, 0.99, dry_run=False)
+
+        result = executor.run(request)
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.side_effects)
+        self.assertEqual(result.payload["answer"], "Timer stopped.")
+        self.assertFalse(alarm.active)
 
     def test_cancel_prevents_expiry(self):
         fired = threading.Event()

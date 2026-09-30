@@ -6,19 +6,23 @@
 **Method:** `inference/benchmark.py` — ONNX Runtime CPU, true utterance length (no pad-to-400),
 timing scoped to `session.run()` only, 10 warmup + N timed runs, ARM clock/temp sampled before/after.
 
+These are historical measurements for the 3.46 MB artifact tested at the time. The 6 MB
+limit has since been removed; size remains reported but is not a current acceptance gate.
+Do not attribute these Pi measurements to the newer `v19-20260929-2` artifact without rerunning UAT.
+
 ## 1. Headline verdict
 
 | Gate (docs/plan.md) | Limit | Measured (Pi 5) | Status |
 |---|---|---|---|
-| Model size (int8) | ≤ 6 MB | **3.46 MB** | ✅ PASS |
+| Model size (int8) | Report only; no cap | **3.46 MB** | Informational |
 | RTF (inference / audio) | ≤ 0.3 | **0.014** (worst, 2 s) | ✅ PASS (~21× margin) |
 | Latency p95 (1–2 s command) | < 100 ms | **28.5 ms** (2 s, 1 thread) | ✅ PASS (~3.5× margin) |
 | Intent accuracy | ≥ 90% | **97.9% on-distribution** (val) | ✅ PASS (see §5 caveat) |
 | Slot exact-match | — | **17.3%** (val) | ⚠️ WEAK — see §5 |
 
-**Bottom line:** the int8 ONNX model is **faithful to the trained checkpoint** and is
+**Bottom line:** the tested int8 ONNX model is **faithful to the trained checkpoint** and is
 **comfortably deployable on the Pi 5 for latency** — it clears the RTF and latency bars
-by an order of magnitude, holds clock under a 60 s thermal soak, and fits the size budget.
+by an order of magnitude and holds clock under a 60 s thermal soak. File size is recorded only.
 The open risk is **quality on real, recorded speech**, not compute.
 
 ## 2. Model provenance & parity

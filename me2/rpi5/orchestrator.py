@@ -154,6 +154,7 @@ def default_orchestrator(*, rgb: Any | None = None,
                          dry_run: bool = True,
                          weather_fn: Callable[[], str] | None = None,
                          timer_manager: Any | None = None,
+                         timer_alarm: Any | None = None,
                          reminder_store: Any | None = None,
                          volume_controller: Any | None = None,
                          media_player: Any | None = None,
@@ -166,6 +167,8 @@ def default_orchestrator(*, rgb: Any | None = None,
     ``what_weather`` intent can return a live, spoken-friendly line.
     ``timer_manager`` (optional) is passed to :class:`TimerExecutor` so the
     timer intents can schedule / cancel a real in-process timer.
+    ``timer_alarm`` (optional) is passed to :class:`TimerExecutor` so
+    ``stop_timer`` can also stop a repeating expiry alert.
     ``reminder_store`` (optional) is passed to :class:`ReminderExecutor` and
     :class:`InfoExecutor` so reminders can be persisted and read back.
     ``volume_controller`` (optional) is passed to :class:`VolumeExecutor` so
@@ -188,7 +191,8 @@ def default_orchestrator(*, rgb: Any | None = None,
         "media": MediaExecutor(dry_run, player=media_player,
                               volume_controller=volume_controller,
                               media_volume=media_volume),
-        "timer": TimerExecutor(dry_run, manager=timer_manager),
+        "timer": TimerExecutor(dry_run, manager=timer_manager,
+                               alarm=timer_alarm),
         "remind": ReminderExecutor(dry_run, store=reminder_store),
         "comms": CommsExecutor(dry_run, dialer=dialer),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn,

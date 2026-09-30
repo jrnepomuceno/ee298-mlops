@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Quantize the exported ONNX VCM to int8 for Raspberry Pi 5 deployment.
 
-The FP32 export is ~7.6 MB (4 bytes/param). int8 dynamic quantization brings
-it to ~1.9 MB (1 byte/param), comfortably under the <= 6 MB on-device budget,
-and typically *speeds up* CPU inference on the Pi (int8 GEMM kernels).
+The FP32 export is ~7.6 MB (4 bytes/param). Dynamic quantization reduces
+eligible weight storage and typically speeds up CPU inference on the Pi.
+The resulting file size is reported but is not subject to a fixed limit.
 
 Why dynamic (no calibration set):
   * The model is small and the Pi runs CPU-only, so the extra accuracy of a
@@ -107,8 +107,6 @@ def main() -> int:
                    help="output int8 ONNX path")
     p.add_argument("--verify", action="store_true",
                    help="run a CPU latency proxy benchmark after quantizing")
-    p.add_argument("--budget-mb", type=float, default=6.0,
-                   help="on-device size budget in MB (default 6.0)")
     args = p.parse_args()
 
     if not Path(args.input).exists():
@@ -118,14 +116,12 @@ def main() -> int:
     _quantize(args.input, args.output)
 
     size_mb = os.path.getsize(args.output) / 1e6
-    ok = size_mb <= args.budget_mb
-    print(f"[quant] size check: {size_mb:.2f} MB {'<=' if ok else '>'} "
-          f"{args.budget_mb:.1f} MB budget -> {'PASS' if ok else 'FAIL'}")
+    print(f"[quant] output size: {size_mb:.2f} MB (informational)")
 
     if args.verify:
         _bench(args.output)
 
-    return 0 if ok else 2
+    return 0
 
 
 if __name__ == "__main__":

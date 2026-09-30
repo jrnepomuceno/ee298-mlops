@@ -40,10 +40,6 @@ class VolumeExecutor(Executor):
             elif code == "volume.down":
                 level = ctrl.step(-STEP_PERCENT)
                 detail = f"volume down to {level}%"
-            elif code == "volume.mute":
-                ctrl.mute()
-                level = 0
-                detail = "muted"
             elif code == "volume.unmute":
                 level = ctrl.unmute()
                 detail = f"unmuted to {level}%"

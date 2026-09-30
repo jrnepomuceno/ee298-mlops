@@ -9,6 +9,7 @@ from rpi5.facade import (
 )
 from rpi5.orchestrator import Orchestrator, default_orchestrator
 from rpi5.executors.base import ExecutionResult
+from rpi5.replies import build_reply
 
 
 class DecodeGateTests(unittest.TestCase):
@@ -16,16 +17,25 @@ class DecodeGateTests(unittest.TestCase):
         r = decode("oov", {}, 0.99)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "oov")
+        self.assertEqual(r.reply_text, "I don't understand.")
 
     def test_unknown_intent_rejected_as_oov(self):
         r = decode("dance_party", {}, 0.99)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "oov")
+        self.assertEqual(r.reply_text, "I don't understand.")
+
+    def test_disabled_mute_label_rejected_as_oov(self):
+        r = decode("mute", {}, 0.99)
+        self.assertIsInstance(r, RejectResult)
+        self.assertEqual(r.reason, "oov")
+        self.assertEqual(r.reply_text, "I don't understand.")
 
     def test_low_confidence_rejected(self):
         r = decode("turn_on_lights", {}, 0.5)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "low_confidence")
+        self.assertEqual(r.reply_text, "I don't understand.")
 
     def test_confidence_above_threshold_passes(self):
         r = decode("turn_on_lights", {}, DEFAULT_CONFIDENCE_THRESHOLD + 0.01)
@@ -35,6 +45,7 @@ class DecodeGateTests(unittest.TestCase):
         r = decode("turn_on_lights", {}, None)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "low_confidence")
+        self.assertEqual(r.reply_text, "I don't understand.")
 
 
 class DecodeSlotTests(unittest.TestCase):
@@ -42,16 +53,19 @@ class DecodeSlotTests(unittest.TestCase):
         r = decode("dim_lights", {}, 0.9)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "missing_slot")
+        self.assertEqual(r.reply_text, "I don't understand.")
 
     def test_out_of_range_slot(self):
         r = decode("dim_lights", {"percent": 150}, 0.9)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "invalid_slot")
+        self.assertEqual(r.reply_text, "Invalid value. Try again.")
 
     def test_non_numeric_slot(self):
         r = decode("set_temperature", {"temperature": "hot"}, 0.9)
         self.assertIsInstance(r, RejectResult)
         self.assertEqual(r.reason, "invalid_slot")
+        self.assertEqual(r.reply_text, "Invalid value. Try again.")
 
     def test_word_number_coercion(self):
         r = decode("dim_lights", {"percent": "forty"}, 0.9)
@@ -65,6 +79,24 @@ class DecodeSlotTests(unittest.TestCase):
 
 
 class DecodeReplyTests(unittest.TestCase):
+    def test_fallback_rejection_copy_matches_facade_copy(self):
+        self.assertEqual(
+            build_reply({}, {"status": "rejected", "code": "invalid_slot"})["text"],
+            "Invalid value. Try again.",
+        )
+        self.assertEqual(
+            build_reply({}, {"status": "rejected", "code": "out_of_vocabulary"})["text"],
+            "I don't understand.",
+        )
+        self.assertEqual(
+            build_reply({}, {"status": "rejected", "code": "missing_slot"})["text"],
+            "I don't understand.",
+        )
+        self.assertEqual(
+            build_reply({}, {"status": "rejected", "code": "confidence_below_threshold"})["text"],
+            "I don't understand.",
+        )
+
     def test_all_known_intents_have_specs(self):
         for intent in KNOWN_INTENTS:
             self.assertIn(intent, INTENT_SPECS)

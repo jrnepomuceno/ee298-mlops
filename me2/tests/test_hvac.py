@@ -55,7 +55,7 @@ class TestHvacSetTemperature(unittest.TestCase):
         self.assertFalse(res.side_effects)          # audio-only, no hardware
         self.assertEqual(res.payload["temperature"], 24)
         self.assertEqual(res.payload["unit"], "C")
-        self.assertEqual(res.payload["answer"], "Setting the temperature to 24 degrees.")
+        self.assertEqual(res.payload["answer"], "Temperature set to 24 degrees.")
 
     def test_band_edges_accepted(self):
         ex = HvacExecutor(dry_run=False)
@@ -103,7 +103,7 @@ class TestHvacWiring(unittest.TestCase):
         self.assertIsNotNone(result.execution)
         self.assertTrue(result.execution.ok)
         # The spoken confirmation is what the user hears.
-        self.assertIn("Setting the temperature to 21 degrees.", spoken)
+        self.assertEqual(spoken, ["Temperature set to 21 degrees."])
 
 
 if __name__ == "__main__":

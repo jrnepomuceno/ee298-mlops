@@ -1,9 +1,11 @@
 # ME2 — Voice Controlled Smart Device: Project Plan
 
-**Last updated:** 2026-09-29
+**Last updated:** 2026-09-30
 **Target device:** Raspberry Pi 5 (2 GB profile; actual unit 8 GB)
-**Hard constraints:** ≤ 6 MB int8 model · RTF ≤ 0.3 (near-instant) · fully on-device · no cloud · no LLM
+**Acceptance constraints:** RTF ≤ 0.3 (near-instant) · fully on-device · no cloud · no LLM. Model size is measured/reported, with no fixed cap for now.
 **Shipped model:** `v19-20260929-2` — 19-intent, 50-epoch CUDA, "large" preset (see §1, §2)
+
+**Current M4 repository scope:** ONNX model loading/porting, inference, the Pi runtime harness and task execution, microphone/speaker handling, Piper TTS, and benchmarking. Dataset construction and model training below are retained as historical/supporting notes, not the active repository workstream.
 
 ---
 
@@ -34,16 +36,18 @@ yields a transcript, and deterministic regexes turn (intent, transcript) into sl
 
 (The 16-class baseline gained `volume_up`, `volume_down`, `mute` in the 19-intent "Track B" build.)
 
+**Runtime note:** `mute` remains in the trained ONNX label schema to preserve output indices, but is disabled in the application: the facade and harness reject it as unknown, and the volume executor will not dispatch `volume.mute`.
+
 ---
 
 ## 2. Current status (verified by execution)
 
-> **As of 2026-09-29** the project has moved well past the 16-intent baseline described below.
-> The **shipped model is `v19-20260929-2`** — a 19-intent "large" (4.40 M-param) model trained 50
-> epochs on CUDA. Validation (see `docs/VALIDATION.md`): val acc **94.46%**, macro-F1 **94.49%**,
-> on-Pi int8 **3.46 MB**, RTF **0.014**, p95 latency **28.5 ms**, on-distribution intent acc
-> **97.9%**. All 18 command intents are built and wired live through the facade; the assistant is
-> deployed and running on the Pi 5. The table below is the historical 16-intent snapshot.
+> **As of 2026-09-30** the latest model is `v19-20260929-2` — a 19-intent "large" (4.40 M-param)
+> model trained 50 epochs on CUDA. Its recorded validation accuracy is **94.46%** and macro-F1 is
+> **94.49%**; its INT8 ONNX artifact is **7.75 MB**. Model size is currently informational, not a
+> release gate. The documented Pi latency/quality results below are from a different 3.46 MB
+> artifact and must not be attributed to `v19-20260929-2`; run the UAT benchmark on the exact
+> artifact before making deployment claims. The table below is the historical 16-intent snapshot.
 
 ### ✅ Done (historical — 16-intent baseline, 2026-09-19)
 
@@ -52,7 +56,7 @@ yields a transcript, and deterministic regexes turn (intent, transcript) into sl
 | Full pipeline runs end-to-end | `generate` → `train` → `test` → `demo` all exit 0 |
 | Fatal bug 1 fixed — conv/GRU shape mismatch | `MaxPool2d((2,1))` ×2 in `model.py`; forward passes: `intent (2,16)`, `ctc (2,100,77)` |
 | Fatal bug 2 fixed — `KeyError: 'acc'` | `val_m["accuracy"]` in `main.py` (history + print) |
-| Model size within budget | **1,958,109 params ≈ 1.96 MB int8** (budget: 6 MB) via `gru_in = Linear(10240, 128)` |
+| Model size | Report actual artifact bytes; no fixed cap for now |
 | Inference speed (Mac/MPS) | ~31 ms/utterance steady-state on 400-frame input |
 | Minor cleanups | dead `:00` conditional, wrapper deletion, help text, `MAX_DURATION_S` removal, cache annotation |
 | Code synced to `~/MyPlayground/Pi5-VCM/` | 5 files diff-verified byte-identical |
@@ -119,14 +123,16 @@ synthetic data (acc 0.155 — pipeline check only).
    - true-length `input_lengths` for CTC (`train.py`/`dataloader.py`)
 2. **Train on the real dataset** — Adam, lr 1e-3 with cosine decay, 30–50 epochs,
    early-stop on val intent accuracy. ~15 s/epoch on Mac MPS; HPC optional.
-3. **Export for the Pi** — TorchScript (`torch.jit.script`) or ONNX; verify int8 size
-   ≤ 6 MB and parity with PyTorch on 20 held-out clips.
+3. **Export for the Pi** — TorchScript (`torch.jit.script`) or ONNX; record int8 size
+   and verify parity with PyTorch on 20 held-out clips.
 4. **Latency optimization** — remove pad-to-400 (issue #5); measure per-utterance latency
    on true lengths. Target: < 100 ms on Pi 5 for a typical 1–2 s command.
 
-### Task 3 — Benchmark design (collective) — 🔴 not started
+### Task 3 — Benchmark design (collective) — 🟡 UAT prepared; real-speech run pending
 
-Proposed benchmark (draft for the group):
+Prepared RPi5 run sheet: [`docs/USER_ACCEPTANCE_BENCHMARK.md`](USER_ACCEPTANCE_BENCHMARK.md). The bundled `bench_wavs/` set is synthetic smoke data; real speaker-disjoint recordings are still required for acceptance quality claims.
+
+Proposed benchmark rubric for the group:
 - **Clean set** — held-out real recordings, speaker-disjoint.
 - **Noisy set** — same clips + noise at SNR 15 / 10 / 5 dB.
 - **Metrics:**
@@ -185,7 +191,7 @@ Next runtime work:
 
 ### Task 6 — Tiny & real-time (individual) — 🟡 on track
 
-- ✅ Size: 1.96 MB int8 (budget 6 MB)
+- ✅ Size: artifact size measured and recorded (no fixed cap for now)
 - ⏳ RTF: must be measured **on the Pi** (Mac number: ~31 ms/400 frames; after removing
   padding, expect well under 100 ms for 1–2 s commands on Pi 5)
 - ⏳ 2 GB profile check: model + runtime memory footprint on the 2 GB config
@@ -226,7 +232,7 @@ Single trained model + rule-based `parse_slots`. Nothing else.
 |---|---|
 | Real speech much harder than synthetic formant tones | Augmentation (noise, speed, gain); expect to iterate on architecture only if val acc stalls |
 | Slot accuracy poor on multi-word content (contacts, reminders) | Digit-merge fix + expand CTC vocab contacts; rule parser is trivially extensible |
-| Pi 5 2 GB memory pressure with torch runtime | TorchScript/ONNX Runtime; if needed, drop to ONNX int8 quantization (model is 1.96 MB — headroom is huge) |
+| Pi 5 memory pressure with torch runtime | TorchScript/ONNX Runtime; measure model and runtime memory on the target device |
 | Group dataset quality varies | Speaker-disjoint split + per-speaker reporting in the benchmark |
 | "Instantaneous" expectation | Remove padding (biggest win), VAD-trim, report p50/p95 honestly in VALIDATION.md |
 

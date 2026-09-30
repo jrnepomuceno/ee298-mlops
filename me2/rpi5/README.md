@@ -23,6 +23,90 @@ python -m rpi5.run --microphone --wakeword alexa \
 	--checkpoint inference/best.pt
 ```
 
+## Model-free intent scenarios
+
+Before an ONNX model is available, exercise every intent through the real
+facade, dry-run task executors, event generation, and reply formatting:
+
+```bash
+python -m rpi5.mock_run --intent all
+python -m rpi5.mock_run --intent set_timer
+python -m rpi5.mock_run --intent turn_on_lights --confidence 0.2
+python -m rpi5.mock_run --intent set_temperature --temperature 25
+```
+
+The runner supplies valid deterministic slots for each supported intent plus
+an OOV case. With no live flags, all tasks stay dry-run and RGB/speech are
+recorded as stubs. Temperature mock values are selected with `--temperature`
+(10-35 °C; default 22). Select one intent to opt into a specific physical/service
+path:
+
+```bash
+python -m rpi5.mock_run --intent what_time --live-speaker \
+	--piper-bin ~/piper-venv/bin/piper \
+	--piper-model ~/piper-voices/en_US-lessac-medium.onnx --audio-player aplay
+python -m rpi5.mock_run --intent turn_on_lights --live-lights
+python -m rpi5.mock_run --intent volume_up --live-volume
+python -m rpi5.mock_run --intent volume_down --live-volume
+python -m rpi5.mock_run --intent what_weather --live-weather --weather-location "Quezon City"
+```
+
+For a three-second internal countdown, audible confirmation, and a persistent
+ringing alarm:
+
+```bash
+python -m rpi5.mock_run --intent set_timer --live-timer --live-speaker \
+	--timer-seconds 3 --ring-seconds 3 \
+	--piper-bin ~/piper-venv/bin/piper \
+	--piper-model ~/piper-voices/en_US-lessac-medium.onnx --audio-player pw-play
+```
+
+The mock runner uses the real process-local `TimerManager` and `TimerAlarm`:
+after expiry it speaks “Your timer is up.” immediately and every 10 seconds,
+while looping `timer_ding.wav` until `stop_timer` is received. In this test
+runner, `--ring-seconds 3` is an observation window, after which it injects a
+mock `stop_timer` intent to stop the loop; in the production `rpi5.run` path,
+the loop remains active until the model recognizes `stop_timer`. Set
+`--ring-seconds 12` to verify the 10-second spoken repeat in the mock test. To
+test cancellation before expiry instead, use `--intent stop_timer --live-timer
+--live-speaker` with the same duration; the runner arms a short timer, cancels
+it, and verifies no expiry sound occurs. Test timers are process-local and do
+not cancel timers in a separately running assistant.
+
+Each live volume test snapshots the current master output, steps it by 10%,
+reports the stepped value, and restores the original level in cleanup.
+
+For a real microphone-to-speaker integration with mocked recognition, capture
+one utterance and force a 25 °C temperature reply:
+
+```bash
+python -m rpi5.mock_run --intent set_temperature --temperature 25 \
+	--microphone --input-device "HyperX DuoCast" --live-speaker \
+	--piper-bin ~/piper-venv/bin/piper \
+	--piper-model ~/piper-voices/en_US-lessac-medium.onnx --audio-player pw-play
+```
+
+Speak any short phrase after the prompt. Audio is captured by VAD but its
+content is deliberately ignored; the selected mock intent and temperature
+drive the task/reply. This verifies microphone capture, audio-only HVAC routing,
+Piper synthesis, and speaker playback, not model recognition. Every WAV played
+by `WavPlayer` gets a 750 ms digital-silence pre-roll to allow the Bluetooth
+speaker to leave standby before speech and avoid clipping its first word; no
+noise is added.
+
+The speaker option synthesizes and plays the reply; the lights option uses the
+selected light driver; the weather option performs a real OpenWeatherMap
+request using `OPENWEATHER_API_KEY`. `--intent all` cannot be combined with a
+live option. A SIP call is separately guarded: `--live-call` requires
+`--intent call`, `--confirm-call`, a numeric `--mock-contact`, and a configured
+available Baresip endpoint. It stays open for 15 seconds by default; set
+`--call-seconds` to a value from 1 to 120. Use only a test account/number you control. The
+mock runner does not open a microphone unless `--microphone` is explicitly
+provided; recognition is always forced to the selected deterministic intent.
+
+The automated coverage is `python -m unittest discover -s tests -p 'test_mock_intents.py'`;
+existing peripheral unit tests separately use fake drivers and subprocesses.
+
 Microphone mode listens on the default 16 kHz input device. The energy VAD
 starts after two loud frames, keeps a short pre-roll, and ends after roughly
 360 ms of silence or five seconds. Press `Ctrl-C` to stop. Install

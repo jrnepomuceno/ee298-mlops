@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import unittest
 
+from rpi5.facade import ActionRequest
+from rpi5.executors.volume import VolumeExecutor
 from rpi5.volume import (DUCK_LEVEL, SAFE_FALLBACK_LEVEL, VolumeController)
 
 
@@ -136,6 +138,21 @@ class StepMuteTests(unittest.TestCase):
         ctrl.mute()
         self.assertEqual(fake.level, 0)
         self.assertEqual(ctrl.unmute(), 85)
+
+
+class DisabledMuteIntentTests(unittest.TestCase):
+    def test_volume_executor_does_not_dispatch_mute_action(self):
+        ctrl, fake = make_ctrl(start=85)
+        request = ActionRequest(
+            intent="mute", category="volume", slots={},
+            action_code="volume.mute", reply_text="", dry_run=False,
+            confidence=0.99,
+        )
+        result = VolumeExecutor(dry_run=False, controller=ctrl).run(request)
+        self.assertFalse(result.ok)
+        self.assertFalse(result.side_effects)
+        self.assertIn("unsupported volume action", result.detail)
+        self.assertEqual(fake.sets, [])
 
 
 class WpctlParseTests(unittest.TestCase):

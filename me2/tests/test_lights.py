@@ -100,7 +100,7 @@ class TestHyperxDuoCastDriver(unittest.TestCase):
 
     def test_off_sends_black(self):
         self.drv.off()
-        self.assertEqual(self.fake.calls[-1][2], "000000")
+        self.assertEqual(self.fake.calls[-1][2], "0")
 
     def test_set_brightness_clamps_and_returns(self):
         self.assertEqual(self.drv.set_brightness(150), 100)
@@ -122,7 +122,7 @@ class TestHyperxDuoCastDriver(unittest.TestCase):
 
     def test_close_turns_off(self):
         self.drv.close()
-        self.assertEqual(self.fake.calls[-1][2], "000000")
+        self.assertEqual(self.fake.calls[-1][2], "0")
 
 
 class TestLightExecutor(unittest.TestCase):
@@ -152,7 +152,8 @@ class TestLightExecutor(unittest.TestCase):
         self.assertTrue(res.ok)
         self.assertTrue(res.side_effects)
         self.assertEqual(res.payload["driver"], "hyperx-duocast")
-        run.assert_called_once()
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[-1][0][0][1:], ["solid", "FFF4E6"])
 
     def test_live_off(self):
         drv = HyperxDuoCastDriver(executable="/opt/bin/quadcastrgb")
@@ -162,7 +163,7 @@ class TestLightExecutor(unittest.TestCase):
             res = ex.run(_req("turn_off_lights"))
         self.assertTrue(res.ok)
         self.assertEqual(res.payload["level"], 0)
-        self.assertEqual(run.call_args[0][0][2], "000000")
+        self.assertEqual(run.call_args_list[-1][0][0][2], "0")
 
     def test_live_dim_reports_applied_level(self):
         drv = HyperxDuoCastDriver(executable="/opt/bin/quadcastrgb")
@@ -208,7 +209,7 @@ class TestLightOrchestration(unittest.TestCase):
         self.assertTrue(result.handled)
         self.assertEqual(result.execution.payload["driver"], "hyperx-duocast")
         self.assertEqual(result.execution.payload["level"], 25)
-        run.assert_called_once()
+        self.assertEqual(run.call_count, 2)
 
     def test_no_driver_keeps_lights_dry_run(self):
         orch = default_orchestrator(dry_run=True)

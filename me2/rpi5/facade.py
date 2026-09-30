@@ -100,7 +100,7 @@ INTENT_SPECS: dict[str, dict[str, Any]] = {
     # --- hvac ------------------------------------------------------------- #
     "set_temperature": dict(category="hvac", code="thermostat.set",
                             slots=(SlotSpec("temperature", "int", lo=10, hi=35),),
-                            reply="Setting the temperature to {temperature} degrees."),
+                            reply="Temperature set to {temperature} degrees."),
     # --- media ------------------------------------------------------------ #
     "play_music":  dict(category="media", code="media.play",
                         slots=(), reply="Playing music."),
@@ -130,8 +130,6 @@ INTENT_SPECS: dict[str, dict[str, Any]] = {
                         slots=(), reply="Turning the volume up."),
     "volume_down": dict(category="volume", code="volume.down",
                         slots=(), reply="Turning the volume down."),
-    "mute":        dict(category="volume", code="volume.mute",
-                        slots=(), reply="Muting the output."),
     # --- information (local / web) --------------------------------------- #
     "what_time":      dict(category="info", code="query.time",
                            slots=(), reply="The time is {now}."),
@@ -243,13 +241,13 @@ def _local_time_text() -> str:
 # --------------------------------------------------------------------------- #
 def _reject_oov(intent: str) -> RejectResult:
     return RejectResult(reason="oov", detail=f"intent '{intent}' is out of vocabulary",
-                        reply_text="I did not recognize that command.", intent=intent)
+                        reply_text="I don't understand.", intent=intent)
 
 
 def _reject_low_conf(conf: float, threshold: float) -> RejectResult:
     return RejectResult(reason="low_confidence",
                         detail=f"confidence {conf:.3f} < {threshold:.3f}",
-                        reply_text="I'm not sure I caught that. Could you repeat it?",
+                        reply_text="I don't understand.",
                         intent="")
 
 
@@ -310,11 +308,11 @@ def decode(
     normalized, missing, invalid = _validate_slots(intent, slots)
     if missing is not None:
         return RejectResult(reason="missing_slot", detail=missing,
-                            reply_text="Could you give me a bit more detail?",
+                            reply_text="I don't understand.",
                             intent=intent)
     if invalid is not None:
         return RejectResult(reason="invalid_slot", detail=invalid,
-                            reply_text="That value doesn't look right. Try again.",
+                            reply_text="Invalid value. Try again.",
                             intent=intent)
 
     reply = _render(spec["reply"], normalized, intent)

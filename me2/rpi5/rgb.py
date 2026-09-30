@@ -9,6 +9,19 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
 
+def _stop_quadcastrgb() -> None:
+    try:
+        subprocess.run(
+            ["killall", "quadcastrgb"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+        )
+    except OSError:
+        pass
+
+
 class RgbController:
     """Map assistant states to QuadcastRGB commands.
 
@@ -29,7 +42,7 @@ class RgbController:
         return self.idle()
 
     def idle(self) -> dict[str, Any]:
-        return self.solid("000000", "idle")
+        return self.solid("0", "idle")
 
     def wake(self) -> dict[str, Any]:
         return self.animate("00A0FF", "listening", speed=10)
@@ -104,12 +117,7 @@ class RgbController:
 
     @staticmethod
     def _stop_quadcast_process() -> None:
-        subprocess.run(
-            ["killall", "quadcastrgb"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        _stop_quadcastrgb()
 
 
 # --------------------------------------------------------------------------- #
@@ -196,7 +204,7 @@ class HyperxDuoCastDriver(LightDriver):
         self.set_brightness(self._brightness)
 
     def off(self) -> None:
-        self._solid("000000")
+        self._solid("0")
 
     def set_brightness(self, percent: int) -> int:
         percent = max(1, min(100, int(percent)))
@@ -219,6 +227,7 @@ class HyperxDuoCastDriver(LightDriver):
     def _solid(self, hexcolor: str) -> None:
         if not self.available():
             return  # degrade quietly; availability is surfaced by the executor
+        _stop_quadcastrgb()
         subprocess.run(
             [self.executable, "solid", hexcolor],
             check=True, timeout=5,

@@ -23,9 +23,9 @@ from rpi5.facade import RejectResult, ActionRequest
 def _oov_result() -> OrchestratorResult:
     """Mirror the exact shape the orchestrator returns for an OOV utterance."""
     rej = RejectResult(reason="oov", detail="intent 'oov' is out of vocabulary",
-                       reply_text="I did not recognize that command.", intent="oov")
+                       reply_text="I don't understand.", intent="oov")
     return OrchestratorResult(handled=False, request=None, execution=None,
-                              reject=rej, reply_text="I did not recognize that command.")
+                              reject=rej, reply_text="I don't understand.")
 
 
 def _low_conf_result() -> OrchestratorResult:
@@ -68,9 +68,9 @@ class ReplyWavNameShapeTests(unittest.TestCase):
 
     def test_recognized_intent_via_legacy_dict_selects_its_wav(self):
         self.assertEqual(
-            reply_wav_name({"intent": "mute"},
-                           {"status": "dry_run", "action": "volume.mute"}),
-            "mute.wav")
+            reply_wav_name({"intent": "turn_on_lights"},
+                           {"status": "dry_run", "code": "lights.on"}),
+            "turn_on_lights.wav")
 
     def test_none_action_falls_back_to_oov(self):
         self.assertEqual(reply_wav_name({"intent": "oov"}, None), "oov.wav")
@@ -82,12 +82,12 @@ class BuildReplyShapeTests(unittest.TestCase):
         # Previously raised AttributeError before this fix.
         reply = build_reply({"intent": "oov"}, _oov_result())
         self.assertTrue(reply["speak"])
-        self.assertIn("recognize", reply["text"].lower())
+        self.assertEqual(reply["text"], "I don't understand.")
 
     def test_oov_via_legacy_dict(self):
         reply = build_reply({"intent": "oov"},
                             {"status": "rejected", "code": "out_of_vocabulary"})
-        self.assertIn("recognize", reply["text"].lower())
+        self.assertEqual(reply["text"], "I don't understand.")
 
     def test_recognized_via_orchestrator_result(self):
         reply = build_reply({"intent": "turn_on_lights"}, _dry_run_result())

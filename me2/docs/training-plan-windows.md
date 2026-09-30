@@ -1,7 +1,7 @@
 # Area 2 — Optimized Training → ONNX (Windows · RTX 3060 Ti 8 GB)
 
-Goal: train the VCM on the 3060 Ti as fast as 8 GB VRAM allows, then ship a
-**≤ 6 MB int8 ONNX** to the Pi5. This is the full, runnable procedure — the
+Goal: train the VCM on the 3060 Ti as fast as 8 GB VRAM allows, then export
+and measure an int8 ONNX for the Pi5. This is the full, runnable procedure — the
 5-line outline it replaced is obsolete.
 
 Everything below maps to real flags in `model/main.py` and the export/quantize
@@ -21,8 +21,8 @@ scripts. Defaults shown in parentheses.
 | FP32 ONNX export + ORT graph optimize | `model/export_onnx.py`, `model/optimize_onnx.py` | ✅ |
 | **int8 quantization** | `model/quantize_onnx.py` | ✅ **added this session** |
 
-The only thing that was missing — the int8 step that closes the 6 MB budget —
-is now in `model/quantize_onnx.py`.
+The int8 quantization step is implemented in `model/quantize_onnx.py`; artifact
+size is reported but has no fixed cap for now.
 
 ---
 
@@ -130,7 +130,7 @@ Acceptance bar (proposal, tune to product needs):
 
 ---
 
-## 5. Export → optimize → int8 (close the 6 MB budget)
+## 5. Export → optimize → int8
 
 ```bat
 :: 1) FP32 ONNX from the best checkpoint
@@ -147,7 +147,7 @@ Expected sizes:
 | Artifact | Size | Budget |
 |----------|------|--------|
 | `vcm_model_fp32.onnx` | ~7.6 MB | (intermediate) |
-| `vcm_model_int8.onnx` | **~1.9 MB** | **≤ 6 MB ✅** |
+| `vcm_model_int8.onnx` | model-dependent; measure after export | informational |
 
 `--verify` runs a desktop-CPU latency proxy (informational only — **re-time on
 the Pi5**, the Cortex-A76 is the real target; that's Area 3).
@@ -166,14 +166,14 @@ via ONNX Runtime CPU EP.
 | GPU util ~0 %, slow | data-starved | ensure `--mels-dir` set; raise `--num-workers`; `--pin-memory` |
 | `--amp` no speedup | running on CPU | confirm `--device cuda` + CUDA available |
 | val_wer stuck high | CTC vocab / transcripts | check `transcript_to_tokens` coverage; OOV masking is on |
-| int8 > 6 MB | unexpected | shouldn't happen at 1.86 M params; check you quantized, not the fp32 file |
+| int8 file unexpectedly large | quantization may not have applied as expected | inspect ONNX operators and compare with the FP32 file; there is no fixed size gate |
 
 ---
 
 ## 7. Deliverables this area produces
 - `checkpoints\pi5-vcm-best.pt` — best PyTorch checkpoint
 - `checkpoints\history.json` — per-epoch metrics
-- `vcm_model_int8.onnx` — **the Pi5 deployment artifact (≤ 6 MB)**
+- `vcm_model_int8.onnx` — the Pi5 deployment artifact; record its measured size
 - `docs\training-report.md` — copy the final TRAINING REPORT block here
 
 Next: **Area 3** — point the Pi inference path at `vcm_model_int8.onnx` and

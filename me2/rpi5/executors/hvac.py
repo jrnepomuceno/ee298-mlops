@@ -23,7 +23,7 @@ TEMP_MAX = 35
 
 def _spoken_set(temp: int) -> str:
     """TTS-friendly confirmation for a set-point change."""
-    return f"Setting the temperature to {int(temp)} degrees."
+    return f"Temperature set to {int(temp)} degrees."
 
 
 class HvacExecutor(Executor):

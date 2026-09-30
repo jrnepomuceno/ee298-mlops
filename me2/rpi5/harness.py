@@ -55,7 +55,6 @@ ACTION_BY_INTENT = {
     "what_reminders": "query.reminders",
     "volume_up": "volume.up",
     "volume_down": "volume.down",
-    "mute": "volume.mute",
 }
 
 

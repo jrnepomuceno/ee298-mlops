@@ -47,9 +47,8 @@ class VCM(nn.Module):
         )
         self.conv_out_dim = conv_channels * 2 * n_mels  # 64*2*80 = 10240
 
-        # Project the 10240-dim conv output down to hidden_size before the
-        # GRU: without this the GRU's input projection alone is ~7.9M params
-        # (95% of the model) and blows the <= 6 MB int8 budget in background.md.
+        # Project the 10240-dim conv output down to hidden_size before the GRU
+        # to avoid an unnecessarily large recurrent input projection.
         self.gru_in = nn.Linear(self.conv_out_dim, hidden_size)
         self.gru = nn.GRU(
             input_size=hidden_size,

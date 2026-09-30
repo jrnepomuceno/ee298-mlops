@@ -22,7 +22,7 @@ from .calls import make_dialer
 from .state_machine import HarnessStateMachine
 from .tts import PiperTts, WavPlayer
 from .reminders import ReminderStore
-from .timer import TimerManager
+from .timer import AlarmState, TimerAlarm, TimerManager, TimerState
 from .weather import make_weather_fn
 from .volume import VolumeController
 from .media import MediaPlayerController
@@ -165,7 +165,7 @@ def parse_args() -> argparse.Namespace:
     volume = parser.add_argument_group("volume")
     volume.add_argument("--no-volume", action="store_true",
                         help="Disable live output-volume control (volume_up/"
-                             "volume_down/mute become dry-run only)")
+                            "volume_down become dry-run only)")
 
     music = parser.add_argument_group("music")
     music.add_argument("--music-dir", default=str(Path.home() / "Music"),
@@ -262,13 +262,20 @@ def main() -> int:
     rgb = RgbController(args.rgb_executable)
     wav_player: WavPlayer | None = None
     piper_tts: PiperTts | None = None
+    tts_active = threading.Event()
+    timer_alarm: TimerAlarm | None = None
     warmup_timer: threading.Timer | None = None
     def _on_timer_expire(state) -> None:
         # Fires from the timer thread, not the mic loop: keep it self-contained
         # and fail-soft so a missing speaker/TTS never takes the process down.
-        # A countdown timer and a wall-clock alarm both land here; branch on the
-        # state type to pick the right WAV and spoken line.
-        from .timer import AlarmState
+        if isinstance(state, TimerState):
+            if timer_alarm is None:
+                log("[timer] expired but no audio alarm is available", error=True)
+            elif timer_alarm.start():
+                log(f"[timer] expired id={state.timer_id}; repeating alarm started")
+            return
+        if not isinstance(state, AlarmState):
+            return
 
         def _expiry_play(play_fn, path, kind):
             # Duck the master volume under the ring/speech so the mic can still
@@ -283,6 +290,7 @@ def main() -> int:
                 except Exception:  # noqa: BLE001
                     log(f"[{kind}] duck failed; playing at full volume",
                         error=True)
+            tts_active.set()
             try:
                 play_fn(path)
             finally:
@@ -291,18 +299,12 @@ def main() -> int:
                         ctrl.unduck()
                     except Exception:  # noqa: BLE001
                         log(f"[{kind}] unduck failed", error=True)
+                tts_active.clear()
 
-        if isinstance(state, AlarmState):
             kind = "alarm"
             log(f"[alarm] ringing id={state.alarm_id} time={state.time}")
             wav_path = args.alarm_expiry_wav
             speech_text = f"It's {state.time}."
-        else:
-            kind = "timer"
-            log(f"[timer] expired id={state.timer_id} duration="
-                f"{state.duration:g} {state.unit}")
-            wav_path = args.timer_expiry_wav
-            speech_text = "Your timer is up."
         try:
             if wav_player is not None:
                 _expiry_play(wav_player.play, wav_path, kind)
@@ -354,6 +356,38 @@ def main() -> int:
             if (os.path.isfile(args.piper_bin)
                     and os.path.isfile(args.piper_model)):
                 piper_tts = PiperTts(args.piper_bin, args.piper_model)
+
+            def play_timer_ring() -> None:
+                if wav_player is None:
+                    return
+                tts_active.set()
+                try:
+                    wav_player.play(args.timer_expiry_wav)
+                finally:
+                    tts_active.clear()
+
+            def announce_timer_expiry() -> None:
+                if piper_tts is None or wav_player is None:
+                    log("[timer] Piper unavailable; skipping spoken expiry reminder",
+                        error=True)
+                    return
+                with tempfile.NamedTemporaryFile(
+                        prefix="pi5-vcm-timer-", suffix=".wav", delete=False) as tmp:
+                    tmp_path = tmp.name
+                tts_active.set()
+                try:
+                    piper_tts.synthesize("Your timer is up.", tmp_path)
+                    wav_player.play(tmp_path)
+                finally:
+                    tts_active.clear()
+                    os.unlink(tmp_path)
+
+            timer_alarm = TimerAlarm(
+                play_timer_ring,
+                announce_timer_expiry,
+                announce_interval_s=10.0,
+                ring_gap_s=1.0,
+            )
             keepalive_enabled = set_demo_audio_keepalive(True)
             if keepalive_enabled:
                 log("[warming] WILLEN idle-suspend disabled for demo")
@@ -371,6 +405,7 @@ def main() -> int:
                                   dry_run=False,
                                   weather_fn=weather_fn,
                                   timer_manager=timer_manager,
+                                  timer_alarm=timer_alarm,
                                   reminder_store=reminder_store,
                                   volume_controller=volume_controller,
                                   media_player=media_player,
@@ -441,8 +476,6 @@ def main() -> int:
             # play() call) and read by the microphone loop, which closes the mic
             # while it is set. This is the echo guard that stops a spoken reply
             # from being recognised as a second command.
-            tts_active = threading.Event()
-
             if args.vcm_only:
                 rgb.wake()
                 log("[vcm] ready; speak now")
@@ -611,6 +644,16 @@ def main() -> int:
                 finally:
                     tts_active.clear()
 
+            def on_command_speech() -> None:
+                rgb.wake()
+                if timer_alarm is not None:
+                    timer_alarm.pause()
+
+            def on_command_timeout() -> None:
+                machine.cancel_listening()
+                if timer_alarm is not None:
+                    timer_alarm.resume()
+
             machine = HarnessStateMachine(
                 rgb=rgb,
                 play_ack=play_ack,
@@ -643,8 +686,8 @@ def main() -> int:
                     config=vad_config,
                         wakeword=detector,
                         on_wake=acknowledge_wake,
-                        on_speech=rgb.wake,
-                        on_timeout=machine.cancel_listening,
+                        on_speech=on_command_speech,
+                        on_timeout=on_command_timeout,
                         tts_active=tts_active.is_set,
                         command_timeout_s=machine.command_timeout_s,
                         wake_only=args.wake_only):
@@ -655,6 +698,8 @@ def main() -> int:
                     # of firing a second, simultaneous reply.
                     outcome = machine.handle_command(
                         wav, generation=machine.current_generation())
+                    if timer_alarm is not None:
+                        timer_alarm.resume()
                     if outcome is not None:
                         result = current_event.get("result")
                         intent = (result.get("intent", "unknown")
@@ -702,6 +747,8 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001
                 log(f"[shutdown] volume restore failed: {exc}", error=True)
         timer_manager.close()
+        if timer_alarm is not None:
+            timer_alarm.stop()
         rgb.close()
 
     for event in events:

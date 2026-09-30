@@ -7,7 +7,7 @@ Planning only — here's the full plan, weighted toward your individual tasks (2
 2. **Command set**: your ~15 commands, including parameterized ones (dim to X%, timer X min, alarm X am/pm, temp X°) and free-form ones (remind me to…, call…). Free-form slots are what force a real (non-LLM) decoder inside the VCM.
 3. **Device**: RPi4 or RPi5, 2 GB+ RAM, headless, CPU-only.
 
-## Target architecture (one trained model, ~3–6 MB int8)
+## Target architecture (one trained model, compact int8 ONNX; measure actual size)
 
 ```
 mic → VAD → openWakeWord (pretrained, ~200KB) → VCM (your model) → parser/actions
@@ -32,7 +32,7 @@ mic → VAD → openWakeWord (pretrained, ~200KB) → VCM (your model) → parse
 **Training procedure**
 1. SpecAugment (freq/time masking) + speed/pitch/noise augmentation (audiomentations)
 2. 30–60 epochs, AdamW, LR schedule; early-stop on dev set
-3. Export → ONNX → **int8 PTQ** (TFLite or ONNX Runtime) — target ≤6 MB, RTF < 0.3 on RPi4
+3. Export → ONNX → **int8 PTQ** (TFLite or ONNX Runtime) — record artifact size, RTF < 0.3 on target Pi
 4. Keep a float32 reference checkpoint for the benchmark
 
 **Milestones**: M1 model trains on CPU in <4 h · M2 dev-set intent acc ≥90% · M3 int8 model on RPi, RTF measured.
@@ -78,7 +78,7 @@ Propose this rubric to the group:
 ## Task 6 — Tiny + real-time (individual)
 
 Budget to commit to publicly:
-- Model ≤ **6 MB int8**; total app RAM ≤ **1.2 GB** on 2 GB board (measured, not estimated)
+- Model size is measured/reported with no fixed cap for now; total app RAM ≤ **1.2 GB** on 2 GB board (measured, not estimated)
 - **RTF ≤ 0.3** on RPi4 (worst-case device in the pool) → end-to-end wake→intent p95 < 500 ms
 - Proof: `time`/perf logs from the demo device included in the write-up; int8 vs float32 comparison
 

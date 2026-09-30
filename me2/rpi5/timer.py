@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import threading
 from datetime import datetime, timedelta
+import time
 from typing import Callable
 from uuid import uuid4
 
@@ -13,6 +15,8 @@ SECONDS_PER_UNIT = {
     "minute": 60.0,
     "hour": 3600.0,
 }
+
+LOGGER = logging.getLogger("pi5-vcm.timer")
 
 
 @dataclass(frozen=True)
@@ -229,3 +233,106 @@ class TimerManager:
             self._alarm.cancel()
         self._alarm = None
         self._alarm_state = None
+
+
+class TimerAlarm:
+    """Loop timer audio until stopped, with periodic spoken reminders.
+
+    ``play_ring`` and ``announce`` are injected so this worker can be tested
+    without audio hardware. The alarm starts speaking immediately, then every
+    ``announce_interval_s`` while continuing to ring. ``pause`` creates a
+    listening window for the microphone; ``stop`` is used by stop_timer.
+    """
+
+    def __init__(self, play_ring: Callable[[], None],
+                 announce: Callable[[], None],
+                 announce_interval_s: float = 10.0,
+                 ring_gap_s: float = 0.5) -> None:
+        if announce_interval_s <= 0 or ring_gap_s < 0:
+            raise ValueError("announce interval must be positive and ring gap non-negative")
+        self.play_ring = play_ring
+        self.announce = announce
+        self.announce_interval_s = announce_interval_s
+        self.ring_gap_s = ring_gap_s
+        self._stop = threading.Event()
+        self._paused = threading.Event()
+        self._started = threading.Event()
+        self._first_ring = threading.Event()
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+    @property
+    def active(self) -> bool:
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> bool:
+        """Start the loop once; return False if it is already running."""
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return False
+            self._stop.clear()
+            self._paused.clear()
+            self._started.clear()
+            self._first_ring.clear()
+            self._thread = threading.Thread(
+                target=self._run, name="pi5-timer-alarm", daemon=True)
+            self._thread.start()
+            return True
+
+    def wait_started(self, timeout: float | None = None) -> bool:
+        return self._started.wait(timeout)
+
+    def wait_first_ring(self, timeout: float | None = None) -> bool:
+        return self._first_ring.wait(timeout)
+
+    def pause(self) -> bool:
+        if not self.active:
+            return False
+        self._paused.set()
+        return True
+
+    def resume(self) -> bool:
+        if not self.active:
+            return False
+        self._paused.clear()
+        return True
+
+    def stop(self, timeout: float = 3.0) -> bool:
+        with self._lock:
+            thread = self._thread
+            if thread is None or not thread.is_alive():
+                return False
+            self._stop.set()
+            self._paused.clear()
+        if thread is not threading.current_thread():
+            thread.join(timeout=timeout)
+        return True
+
+    def _run(self) -> None:
+        self._started.set()
+        next_announcement = time.monotonic()
+        try:
+            while not self._stop.is_set():
+                if self._paused.is_set():
+                    self._stop.wait(0.05)
+                    continue
+                if time.monotonic() >= next_announcement:
+                    self._invoke(self.announce, "announcement")
+                    next_announcement = time.monotonic() + self.announce_interval_s
+                    continue
+                if self._paused.is_set() or self._stop.is_set():
+                    continue
+                self._first_ring.set()
+                self._invoke(self.play_ring, "ring playback")
+                self._stop.wait(self.ring_gap_s)
+        finally:
+            with self._lock:
+                self._thread = None
+
+    @staticmethod
+    def _invoke(callback: Callable[[], None], label: str) -> None:
+        try:
+            callback()
+        except Exception:  # noqa: BLE001 - keep alarm loop alive on audio errors
+            LOGGER.exception("timer %s failed", label)

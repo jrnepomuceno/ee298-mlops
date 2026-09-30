@@ -23,7 +23,6 @@ REPLY_WAV_BY_INTENT = {
     "what_reminders": "what_reminders.wav",
     "volume_up": "volume_up.wav",
     "volume_down": "volume_down.wav",
-    "mute": "mute.wav",
     "oov": "oov.wav",
 }
 
@@ -83,12 +82,10 @@ def build_reply(result: dict[str, Any] | None, action: Any) -> dict[str, Any]:
     result = result or {}
     view = _action_view(action)
     if view.get("status") == "rejected":
-        if view.get("code") == "out_of_vocabulary":
-            text = "I did not recognize that command."
-        elif view.get("code") == "confidence_below_threshold":
-            text = "I am not confident I understood that."
+        if view.get("code") == "invalid_slot":
+            text = "Invalid value. Try again."
         else:
-            text = "I cannot perform that command yet."
+            text = "I don't understand."
         return {"text": text, "speak": True, "source": "template"}
 
     intent = result.get("intent", "unknown")
@@ -98,7 +95,7 @@ def build_reply(result: dict[str, Any] | None, action: Any) -> dict[str, Any]:
         "turn_on_lights": f"{prefix}turn the lights on.",
         "turn_off_lights": f"{prefix}turn the lights off.",
         "dim_lights": f"{prefix}dim the lights to {slots.get('percent', 'that')} percent.",
-        "set_temperature": f"{prefix}set the temperature to {slots.get('temperature', 'that')} degrees.",
+        "set_temperature": f"Temperature set to {slots.get('temperature', 'that')} degrees.",
         "play_music": f"{prefix}play music.",
         "pause_music": f"{prefix}pause the music.",
         "stop_music": f"{prefix}stop the music.",

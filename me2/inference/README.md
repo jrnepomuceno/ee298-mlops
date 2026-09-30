@@ -1,27 +1,26 @@
-# Pi5-VCM — on-device inference
+# ONNX Inference and Benchmarking
 
-Self-contained inference folder for the **Raspberry Pi 5**. The input is a
-trained checkpoint, **`best.pt`**. Everything runs CPU-only, standalone,
-no cloud, no LLM.
+The Raspberry Pi runtime uses the versioned INT8 ONNX model with ONNX Runtime's CPU provider. Audio features are computed by the NumPy Kaldi-fbank implementation, so the deployed inference path does not require PyTorch or torchaudio.
 
 ## Layout
 
 | File | Purpose |
 |---|---|
-| `infer.py` | Entry point. Loads `best.pt`, runs a wav (or self-test), prints intent / transcript / slots / latency. |
-| `requirements.txt` | Runtime deps: `numpy`, `torch`, `torchaudio`. |
-| `run_pi5.sh` | Pi wrapper (uses the project venv if present, else `python3`). |
-| `sync.sh` | Re-vendor `config.py` / `model/` / `utils/` from the project root so this folder can ship standalone. |
+| `ort_infer.py` | Pi inference backend. Loads ONNX, extracts features, and returns intent/transcript/slots. |
+| `features.py` | Torch-free WAV loading and NumPy Kaldi-fbank implementation shared with the Pi path. |
+| `benchmark.py` | Synthetic latency/thermal tests and labeled WAV quality/UAT reports. |
+| `infer.py` | PyTorch checkpoint reference path for development; not the lightweight Pi runtime. |
+| `run_pi5.sh` | Legacy wrapper for `infer.py`; the `rpi5` harness calls `ort_infer.py` directly. |
+| `requirements.txt` | Legacy PyTorch inference dependencies. For Pi ONNX runtime use root `requirements-runtime.txt` or install `numpy` and `onnxruntime`. |
+| `sync.sh` | Legacy vendoring helper for standalone copies; the main repository uses canonical root modules. |
 
-By default `infer.py` imports the **canonical** `config.py`, `model/`, and
-`utils/` from the project root (one level up) — there is a single source of
-truth, no vendored copies in this folder. Run `./sync.sh` only if you need to
-copy this folder onto the Pi by itself (it vendors `config.py`, `model/`, and
-`utils/` next to `infer.py`).
+`ort_infer.py` imports canonical `config.py`, `model/slots.py`, and `model/onnx_deploy.py` from the project root. Keep those files and the versioned ONNX artifact available together.
 
 ## Quick start (on the Pi)
 
 ```bash
-./run_pi5.sh --checkpoint best.pt --input cmd.wav
-./run_pi5.sh --checkpoint best.pt --self-test --json
+python -m inference.ort_infer --checkpoint models/onnx/v19-20260929-2/vcm_model_int8.onnx --input cmd.wav
+python -m inference.ort_infer --checkpoint models/onnx/v19-20260929-2/vcm_model_int8.onnx --self-test --json
 ```
+
+For Pi 5 performance and user acceptance procedures, see [`docs/USER_ACCEPTANCE_BENCHMARK.md`](../docs/USER_ACCEPTANCE_BENCHMARK.md).

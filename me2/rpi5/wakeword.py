@@ -1,9 +1,10 @@
 """Optional pretrained wake-word adapter for the Pi microphone path."""
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any, Callable
 from pathlib import Path
-import time
 
 import numpy as np
 
@@ -34,6 +35,7 @@ class OpenWakeWordDetector:
         self._buffer = np.zeros(0, dtype=np.int16)
         self._consecutive_hits = 0
         self.on_score = on_score
+        self._lock = threading.Lock()
         # Inter-wake cooldown: after a detection fires, ignore further
         # detections for cooldown_s seconds. This prevents the user's own
         # "Alexa" echo (or a quick double-speak) from re-triggering the
@@ -43,46 +45,49 @@ class OpenWakeWordDetector:
 
     def accepts(self, frame: np.ndarray) -> bool:
         """Return true when the configured model crosses its threshold."""
-        # Cooldown gate: suppress re-triggering within cooldown_s of the
-        # previous detection. This is the primary defence against the
-        # "double Alexa" bug where the user's own wake word (or its room
-        # echo) re-latches the detector before the ack completes.
-        now = time.monotonic()
-        if now - self._last_fire_time < self.cooldown_s:
-            # Still consume the frame so the buffer doesn't grow unbounded,
-            # but never report a detection during the cooldown window.
+        with self._lock:
+            # Ignore wake scores during cooldown, but keep the audio buffer bounded.
+            if time.monotonic() - self._last_fire_time < self.cooldown_s:
+                pcm = np.clip(np.asarray(frame, dtype=np.float32).reshape(-1),
+                              -1.0, 1.0)
+                self._buffer = np.concatenate(
+                    (self._buffer, (pcm * 32767.0).astype(np.int16)))
+                if self._buffer.size >= 1280:
+                    self._buffer = self._buffer[1280:]
+                self._consecutive_hits = 0
+                return False
+
             frame = np.asarray(frame, dtype=np.float32).reshape(-1)
             pcm = np.clip(frame, -1.0, 1.0)
             pcm = (pcm * 32767.0).astype(np.int16)
             self._buffer = np.concatenate((self._buffer, pcm))
-            if self._buffer.size >= 1280:
-                self._buffer = self._buffer[1280:]
-            return False
-        frame = np.asarray(frame, dtype=np.float32).reshape(-1)
-        pcm = np.clip(frame, -1.0, 1.0)
-        pcm = (pcm * 32767.0).astype(np.int16)
-        self._buffer = np.concatenate((self._buffer, pcm))
-        if self._buffer.size < 1280:
-            return False
-        window = self._buffer[:1280]
-        self._buffer = self._buffer[1280:]
-        scores: dict[str, Any] = self.model.predict(window)
-        score = float(scores.get(self.model_name, 0.0))
-        if self.on_score is not None:
-            self.on_score(score)
-        if score >= self.threshold:
-            self._consecutive_hits += 1
-        else:
-            self._consecutive_hits = 0
-        fired = self._consecutive_hits >= 2
-        if fired:
-            self._last_fire_time = time.monotonic()
-        return fired
+            if self._buffer.size < 1280:
+                return False
+            window = self._buffer[:1280]
+            self._buffer = self._buffer[1280:]
+            scores: dict[str, Any] = self.model.predict(window)
+            score = float(scores.get(self.model_name, 0.0))
+            if self.on_score is not None:
+                self.on_score(score)
+
+            if score >= self.threshold:
+                self._consecutive_hits += 1
+            else:
+                self._consecutive_hits = 0
+
+            # Require consecutive hits and enforce cooldown after detection
+            detected = self._consecutive_hits >= 2
+            if detected:
+                self._last_fire_time = time.monotonic()
+                self._consecutive_hits = 0  # Reset after successful detection
+
+            return detected
 
     def reset(self) -> None:
         """Forget audio buffered during a response."""
-        self._buffer = np.zeros(0, dtype=np.int16)
-        self._consecutive_hits = 0
-        self.model.reset()
-        # Re-arm the cooldown so the next detection is allowed immediately.
-        self._last_fire_time = 0.0
+        with self._lock:
+            self._buffer = np.zeros(0, dtype=np.int16)
+            self._consecutive_hits = 0
+            self.model.reset()
+            # Re-arm the cooldown so the next legitimate wake can be accepted.
+            self._last_fire_time = 0.0

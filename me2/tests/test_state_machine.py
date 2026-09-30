@@ -120,6 +120,16 @@ class StateMachineTests(unittest.TestCase):
         self.assertEqual(outcome["status"], "dry_run")
         self.assertEqual(outcome["action"], "lights.on")
 
+    def test_dispatcher_rejects_disabled_mute_label(self):
+        outcome = DryRunDispatcher().dispatch({
+            "intent": "mute",
+            "intent_confidence": 0.99,
+            "min_confidence": 0.75,
+            "slots": {},
+        })
+        self.assertEqual(outcome["status"], "rejected")
+        self.assertEqual(outcome["reason"], "unsupported")
+
     def test_cancel_listening_returns_to_standby(self):
         machine, rgb, calls = self.make_machine()
         machine.acknowledge_wake()

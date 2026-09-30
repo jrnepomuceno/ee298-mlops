@@ -23,13 +23,14 @@ Legend: 🟢 built · 🟡 partial · 🔴 not started (stub)
 | 12 | `call`            | comms  | `contact` str| 🟢 Built | pluggable `Dialer` (default `BaresipDialer`); `--dialer` selects device; target validated against a safe SIP charset (see notes below) |
 | 13 | `volume_up`       | volume | —          | 🟢 Built | `VolumeController` (keep `--no-volume` off) |
 | 14 | `volume_down`     | volume | —          | 🟢 Built | same controller |
-| 15 | `mute`            | volume | —          | 🟢 Built | same controller |
+| 15 | `mute`            | volume | —          | ⚪ Disabled | model label retained for ONNX index compatibility; app facade and harness reject it |
 | 16 | `what_time`       | info   | —          | 🟢 Built | local clock |
 | 17 | `what_weather`    | info   | —          | 🟢 Built | `make_weather_fn` (live; `--no-weather` disables) |
 | 18 | `what_reminders`  | info   | —          | 🟢 Built | reads `ReminderStore` |
 
 ## Scoreboard
-- 🟢 **19 built** — lights, hvac (audio-only set-point), media, volume, timer (countdown + cancel), reminders, info, call (baresip).
+- 🟢 **18 active** — all shipped runtime intents except `mute`.
+- ⚪ **1 disabled** — `mute` remains in the ONNX output schema for class-index compatibility but is rejected by runtime routing.
 - 🟡 **0 partial**
 - 🔴 **0 not started** — all 19 intents built.
 
@@ -108,7 +109,7 @@ is touched — the "side effect" is the spoken confirmation plus a structured
   missing / non-numeric values as `invalid_slot` *before* the executor runs
   ("Sorry, that didn't work."). The `HvacExecutor` re-checks the same band as a
   defensive backstop, so it is safe even if the gate is bypassed.
-- **Reply:** `Setting the temperature to {n} degrees.` — carried in
+- **Reply:** `Temperature set to {n} degrees.` — carried in
   `payload["answer"]`, which the orchestrator prefers over the facade template
   when present. `payload` also carries `{"temperature": n, "unit": "C"}`.
 - **Future controller:** to make it physical, attach a controller in

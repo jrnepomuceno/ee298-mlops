@@ -33,9 +33,11 @@ class TimerExecutor(Executor):
 
     category = "timer"
 
-    def __init__(self, dry_run: bool = True, manager: object | None = None) -> None:
+    def __init__(self, dry_run: bool = True, manager: object | None = None,
+                 alarm: object | None = None) -> None:
         super().__init__(dry_run)
         self.manager = manager
+        self.alarm = alarm
 
     def _live(self, req: ActionRequest) -> ExecutionResult:
         mgr = self.manager
@@ -57,6 +59,8 @@ class TimerExecutor(Executor):
                                            action_code=req.action_code,
                                            detail=f"unsupported timer unit {unit!r}",
                                            side_effects=False)
+                if self.alarm is not None:
+                    self.alarm.stop()
                 mgr.set_timer(duration, unit)
                 return ExecutionResult(ok=True, intent=req.intent, category=self.category,
                                        action_code=req.action_code,
@@ -83,7 +87,9 @@ class TimerExecutor(Executor):
                                        payload={"answer": f"Alarm set for {res['time']}."})
             elif req.action_code == "timer.cancel":
                 res = mgr.cancel()
-                cancelled = res.get("side_effects")
+                alarm_stopped = (self.alarm.stop()
+                                 if self.alarm is not None else False)
+                cancelled = bool(res.get("side_effects") or alarm_stopped)
                 answer = ("Timer stopped." if cancelled
                           else "There's no timer running.")
                 return ExecutionResult(ok=True, intent=req.intent, category=self.category,
