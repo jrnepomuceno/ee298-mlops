@@ -63,7 +63,7 @@ class RgbController:
 
     def timer_alert(self) -> dict[str, Any]:
         self._timer_alert = True
-        return self.animate("FF0000", "timer_alarm", speed=5, mode="blink")
+        return self.animate("FF0000", "timer_alarm", speed=5, mode="pulse")
 
     def clear_timer_alert(self) -> dict[str, Any]:
         self._timer_alert = False
