@@ -79,10 +79,16 @@ def _TIMER_REPLY(slots: Mapping[str, Any]) -> str:
     """Slot-aware timer reply (handles optional unit)."""
     dur = slots.get("duration")
     unit = str(slots.get("duration_unit", "minute")).rstrip("s")
-    unit_word = "second" if unit.startswith("sec") else "minute"
     if dur is None:
-        return "Setting the timer."
-    return f"Timer set for {dur} {unit_word}s."
+        return "Setting timer. Starting now."
+    if unit.startswith("sec"):
+        unit_word = "second"
+    elif unit.startswith("hour"):
+        unit_word = "hour"
+    else:
+        unit_word = "minute"
+    plural = "" if int(dur) == 1 else "s"
+    return f"Setting timer for {dur} {unit_word}{plural}. Starting now."
 
 
 #: Per-intent contract: category, machine action code, required slots, reply

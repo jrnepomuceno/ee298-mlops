@@ -20,7 +20,7 @@ def _spoken_set(duration: int, unit: str) -> str:
     else:
         unit_word = "minute"
     plural = "" if int(duration) == 1 else "s"
-    return f"Timer set for {int(duration)} {unit_word}{plural}."
+    return f"Setting timer for {int(duration)} {unit_word}{plural}. Starting now."
 
 
 class TimerExecutor(Executor):

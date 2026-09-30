@@ -634,7 +634,7 @@ def main() -> int:
                 # "Music paused", "Music stopped"), so Piper uses the live
                 # reply rather than a static WAV.
                 _dynamic_intents = ("what_time", "what_weather", "what_reminders",
-                                    "pause_music", "stop_music")
+                                    "pause_music", "stop_music", "set_timer")
                 if result.get("intent") in _dynamic_intents and piper_tts:
                     # Prefer the facade/live reply already computed during
                     # infer_command (it carries the real weather line / clock /

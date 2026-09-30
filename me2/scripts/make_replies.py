@@ -76,7 +76,7 @@ REPLY_TEXT = {
     # (pause_music / stop_music are now spoken dynamically from the live reply
     #  -- "No music is playing." when idle -- so these canned WAVs are only a
     #  fallback if Piper TTS is unavailable.)
-    "set_timer":        "Setting the timer.",
+    "set_timer":        "Setting timer. Starting now.",
     "set_alarm":        "Alarm set.",
     "stop_timer":       "Timer stopped.",
     "remind":           "Reminder set.",
@@ -89,7 +89,7 @@ REPLY_TEXT = {
     "mute":             "Muting the output.",
     "oov":              "I did not recognise that command.",
 }
-PIPER_ONLY_INTENTS = {"pause_music", "stop_music"}
+PIPER_ONLY_INTENTS = {"pause_music", "stop_music", "set_timer"}
 
 # Every intent in config.INTENTS must have a spoken reply WAV. This is the
 # completeness contract that was previously violated (volume_up/down, mute and

@@ -62,19 +62,24 @@ class RecordingManager:
 
 class SpokenSetFormatTests(unittest.TestCase):
     def test_seconds_plural(self):
-        self.assertEqual(_spoken_set(30, "second"), "Timer set for 30 seconds.")
+        self.assertEqual(_spoken_set(30, "second"),
+                         "Setting timer for 30 seconds. Starting now.")
 
     def test_minutes_plural(self):
-        self.assertEqual(_spoken_set(5, "minute"), "Timer set for 5 minutes.")
+        self.assertEqual(_spoken_set(5, "minute"),
+                 "Setting timer for 5 minutes. Starting now.")
 
     def test_singular_minute(self):
-        self.assertEqual(_spoken_set(1, "minute"), "Timer set for 1 minute.")
+        self.assertEqual(_spoken_set(1, "minute"),
+                 "Setting timer for 1 minute. Starting now.")
 
     def test_singular_hour(self):
-        self.assertEqual(_spoken_set(1, "hour"), "Timer set for 1 hour.")
+        self.assertEqual(_spoken_set(1, "hour"),
+                 "Setting timer for 1 hour. Starting now.")
 
     def test_trailing_s_stripped(self):
-        self.assertEqual(_spoken_set(30, "seconds"), "Timer set for 30 seconds.")
+        self.assertEqual(_spoken_set(30, "seconds"),
+                 "Setting timer for 30 seconds. Starting now.")
 
 
 class TimerUnitCorrectnessTests(unittest.TestCase):
@@ -126,9 +131,10 @@ class TimerReplySourceTests(unittest.TestCase):
                      dry_run=False)
         result = orch.run(req)
         self.assertTrue(result.handled)
-        self.assertEqual(result.reply_text, "Timer set for 30 seconds.")
+        self.assertEqual(result.reply_text,
+                 "Setting timer for 30 seconds. Starting now.")
         self.assertEqual(result.execution.payload.get("answer"),
-                         "Timer set for 30 seconds.")
+                 "Setting timer for 30 seconds. Starting now.")
 
     def test_divergent_live_answer_overrides_template(self):
         # A live answer differing from the facade template must win.
@@ -137,7 +143,8 @@ class TimerReplySourceTests(unittest.TestCase):
         req = decode("set_timer", {"duration": 1, "duration_unit": "hour"}, 0.99,
                      dry_run=False)
         result = orch.run(req)
-        self.assertEqual(result.reply_text, "Timer set for 1 hour.")
+        self.assertEqual(result.reply_text,
+                 "Setting timer for 1 hour. Starting now.")
 
 
 class TimerCancelTests(unittest.TestCase):
