@@ -115,7 +115,9 @@ class Orchestrator:
                 reply = str(answer) if answer else req.reply_text
             else:
                 reply = "Sorry, that didn't work."
-        self._speak(reply)
+        already_spoken = bool((err.payload or {}).get("announced_before_play"))
+        if not already_spoken:
+            self._speak(reply)
         self._rgb("speaking", "idle")
         event = self._event(source, intent=req.intent, status=("acted" if err.ok else "error"),
                             code=req.action_code, detail=err.detail, reply=reply,
@@ -159,6 +161,7 @@ def default_orchestrator(*, rgb: Any | None = None,
                          volume_controller: Any | None = None,
                          media_player: Any | None = None,
                          media_volume: int | None = None,
+                         media_before_play: Callable[[str], bool] | None = None,
                          light_driver: Any | None = None,
                          dialer: Any | None = None) -> Orchestrator:
     """Build an orchestrator wired to the stock dry-run executors for all 7 categories.
@@ -190,7 +193,8 @@ def default_orchestrator(*, rgb: Any | None = None,
         "hvac": HvacExecutor(dry_run),
         "media": MediaExecutor(dry_run, player=media_player,
                               volume_controller=volume_controller,
-                              media_volume=media_volume),
+                              media_volume=media_volume,
+                              before_play=media_before_play),
         "timer": TimerExecutor(dry_run, manager=timer_manager,
                                alarm=timer_alarm),
         "remind": ReminderExecutor(dry_run, store=reminder_store),

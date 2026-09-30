@@ -268,6 +268,7 @@ def main() -> int:
     wav_player: WavPlayer | None = None
     piper_tts: PiperTts | None = None
     tts_active = threading.Event()
+    media_before_play = None
     timer_alarm: TimerAlarm | None = None
     warmup_timer: threading.Timer | None = None
     def _on_timer_expire(state) -> None:
@@ -362,6 +363,31 @@ def main() -> int:
                     and os.path.isfile(args.piper_model)):
                 piper_tts = PiperTts(args.piper_bin, args.piper_model)
 
+            def announce_music_track(track_name: str) -> bool:
+                nonlocal post_reply_until
+                if piper_tts is None or wav_player is None:
+                    return False
+                reply_text = f"Playing {Path(track_name).stem}"
+                with tempfile.NamedTemporaryFile(
+                        prefix="pi5-vcm-music-", suffix=".wav", delete=False) as tmp:
+                    tmp_path = tmp.name
+                tts_active.set()
+                try:
+                    piper_tts.synthesize(reply_text, tmp_path)
+                    wav_player.play(tmp_path)
+                    time.sleep(0.3)
+                    if post_reply_guard_s > 0:
+                        post_reply_until = time.monotonic() + post_reply_guard_s
+                    return True
+                except Exception as exc:  # noqa: BLE001 - keep live music fail-soft
+                    log(f"[media] pre-play announcement failed: {exc}", error=True)
+                    return False
+                finally:
+                    tts_active.clear()
+                    os.unlink(tmp_path)
+
+            media_before_play = announce_music_track
+
             def play_timer_ring() -> None:
                 if wav_player is None:
                     return
@@ -417,6 +443,7 @@ def main() -> int:
                                   volume_controller=volume_controller,
                                   media_player=media_player,
                                   media_volume=args.media_volume,
+                                  media_before_play=media_before_play,
                                   light_driver=light_driver,
                                   dialer=dialer)
         harness = PiHarness(HarnessConfig(
@@ -587,6 +614,17 @@ def main() -> int:
                         post_reply_until = time.monotonic() + post_reply_guard_s
 
             def play_reply(result, action):
+                execution = getattr(action, "execution", None)
+                payload = getattr(execution, "payload", {}) or {}
+                if (result.get("intent") == "play_music"
+                        and payload.get("announced_before_play")):
+                    current_event["tts"] = {
+                        "played": True,
+                        "source": "piper",
+                        "text": getattr(action, "reply_text", ""),
+                    }
+                    return
+
                 # Dynamic (Piper TTS) intents: the spoken value is computed at
                 # runtime (clock, live weather, reminder list), so it must be
                 # synthesized from text rather than played from a static WAV.

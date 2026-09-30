@@ -263,6 +263,27 @@ class ExecutorTests(unittest.TestCase):
         self.assertTrue(res.detail.startswith("Playing "))
         self.assertEqual(res.payload["answer"], res.detail)
 
+    def test_play_announces_title_before_player_starts(self):
+        order = []
+
+        def runner(cmd):
+            order.append("player started")
+            return FakeProc()
+
+        ctrl = MediaPlayerController(self.tmp, player="ffplay", runner=runner)
+        ex = MediaExecutor(
+            dry_run=False,
+            player=ctrl,
+            before_play=lambda name: order.append(
+                f"Playing {Path(name).stem}") or True,
+        )
+
+        result = ex.run(self._decode("play_music"))
+        expected = f"Playing {Path(result.payload['track']).stem}"
+        self.assertEqual(order, [expected, "player started"])
+        self.assertEqual(result.detail, expected)
+        self.assertTrue(result.payload["announced_before_play"])
+
     def test_pause_then_stop(self):
         ex = MediaExecutor(dry_run=False, player=self.ctrl)
         ex.run(self._decode("play_music"))
@@ -313,10 +334,30 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual(self.runner.calls, [])  # nothing spawned
 
     def test_pipeline_routes_media_live(self):
-        orch = default_orchestrator(dry_run=False, media_player=self.ctrl)
+        order = []
+
+        def runner(cmd):
+            order.append("player started")
+            return FakeProc()
+
+        ctrl = MediaPlayerController(self.tmp, player="ffplay", runner=runner)
+
+        def announce(track_name):
+            order.append(f"Playing {Path(track_name).stem}")
+            return True
+
+        def speak(reply):
+            order.append(f"duplicate reply: {reply}")
+
+        orch = default_orchestrator(dry_run=False, media_player=ctrl,
+                                    media_before_play=announce, speak=speak)
         res = orch.run(self._decode("play_music"))
         self.assertTrue(res.handled)
         self.assertTrue(res.event["side_effects"])
+        self.assertEqual(order[1], "player started")
+        self.assertTrue(order[0].startswith("Playing "))
+        self.assertTrue(res.execution.payload["announced_before_play"])
+        self.assertNotIn("duplicate reply: " + res.reply_text, order)
 
 
 if __name__ == "__main__":

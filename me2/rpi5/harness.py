@@ -135,12 +135,14 @@ class FacadePipeline:
                  volume_controller: Any | None = None,
                  media_player: Any | None = None,
                  media_volume: int | None = None,
+                 media_before_play: Callable[[str], bool] | None = None,
                  light_driver: Any | None = None,
                  dialer: Any | None = None) -> None:
         self.orchestrator = orchestrator or default_orchestrator(
             dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager,
             reminder_store=reminder_store, volume_controller=volume_controller,
             media_player=media_player, media_volume=media_volume,
+            media_before_play=media_before_play,
             light_driver=light_driver,
             dialer=dialer)
         self.threshold = threshold

@@ -152,10 +152,12 @@ class MediaPlayerController:
         return self._rng.choice(pool)
 
     # -- transport -------------------------------------------------------- #
-    def play(self, directory: str | Path | None = None) -> str:
+    def play(self, directory: str | Path | None = None,
+             before_start: Callable[[str], bool] | None = None) -> str:
         """Start (or restart) playback of a random track.
 
         Returns the track filename. Stops any currently running player first.
+        ``before_start`` can announce the selected filename before audio begins.
         Raises :class:`MediaError` if the directory is empty or no player is
         available.
         """
@@ -165,6 +167,8 @@ class MediaPlayerController:
         track = self._pick()
         binary, base_args = _pick_player(self.player)
         cmd = [binary, *base_args, str(track)]
+        if before_start is not None:
+            before_start(track.name)
         LOGGER.info("[media] play %s via %s", track.name, binary)
         self._proc = self._runner(cmd)
         self._track = track

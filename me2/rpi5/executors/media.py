@@ -14,6 +14,9 @@ and threaded through :func:`~rpi5.orchestrator.default_orchestrator` ->
 """
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Callable
+
 from ..facade import ActionRequest
 from ..media import MediaError, MediaPlayerController
 from .base import ExecutionResult, Executor
@@ -25,11 +28,13 @@ class MediaExecutor(Executor):
     def __init__(self, dry_run: bool = True,
                  player: MediaPlayerController | None = None,
                  volume_controller=None,
-                 media_volume: int | None = None) -> None:
+                 media_volume: int | None = None,
+                 before_play: Callable[[str], bool] | None = None) -> None:
         super().__init__(dry_run)
         self.player = player
         self.volume_controller = volume_controller
         self.media_volume = media_volume
+        self.before_play = before_play
 
     def _live(self, req: ActionRequest) -> ExecutionResult:
         ctrl = self.player
@@ -41,9 +46,19 @@ class MediaExecutor(Executor):
         code = req.action_code
         try:
             if code == "media.play":
-                name = ctrl.play()
+                announced_before_play = False
+
+                def announce_before_start(track_name: str) -> bool:
+                    nonlocal announced_before_play
+                    if self.before_play is not None:
+                        announced_before_play = bool(self.before_play(track_name))
+                    return announced_before_play
+
+                name = ctrl.play(
+                    before_start=(announce_before_start
+                                  if self.before_play is not None else None))
                 self._apply_media_volume()
-                detail = f"Playing {name}"
+                detail = f"Playing {Path(name).stem}"
             elif code == "media.pause":
                 if ctrl.pause():
                     detail = "Music paused"
@@ -60,10 +75,13 @@ class MediaExecutor(Executor):
                     action_code=code,
                     detail=f"unsupported media action {code}",
                     side_effects=False)
+            payload = {"track": ctrl.current_track, "answer": detail}
+            if code == "media.play" and announced_before_play:
+                payload["announced_before_play"] = True
             return ExecutionResult(
                 ok=True, intent=req.intent, category=self.category,
                 action_code=code, detail=detail, side_effects=True,
-                payload={"track": ctrl.current_track, "answer": detail})
+                payload=payload)
         except MediaError:
             # No music available (empty directory or no player binary). This is
             # a normal, expected situation -- not an error -- so the assistant
