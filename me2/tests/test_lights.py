@@ -140,7 +140,7 @@ class TestRgbTimerAlert(unittest.TestCase):
         self.rgb.timer_alert()
         self.popen.assert_called_once()
         self.assertEqual(self.popen.call_args.args[0], [
-            "/opt/bin/quadcastrgb", "-s", "5", "pulse", "FF0000",
+            "/opt/bin/quadcastrgb", "-s", "5", "blink", "FF0000",
         ])
 
         self.rgb.wake()
