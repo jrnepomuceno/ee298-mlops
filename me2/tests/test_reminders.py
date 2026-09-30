@@ -157,6 +157,16 @@ class SummarizeTests(unittest.TestCase):
         s.add("c")
         self.assertEqual(s.summarize(), "You have 3 reminders. 1. a. 2. b. 3. c.")
 
+    def test_many_returns_separate_speech_parts(self):
+        s = self._fresh()
+        s.add("buy milk")
+        s.add("call the dentist")
+        self.assertEqual(s.summarize_parts(), [
+            "You have 2 reminders.",
+            "1. buy milk.",
+            "2. call the dentist.",
+        ])
+
     def test_blank_note_falls_back_to_label(self):
         s = self._fresh()
         s.add("")
@@ -173,11 +183,17 @@ class InfoExecutorRemindersTests(unittest.TestCase):
         store = ReminderStore(None)
         store.add("take out the trash")
         store.add("call Mom")
-        ex = InfoExecutor(dry_run=True, reminders_fn=store.summarize)
+        ex = InfoExecutor(dry_run=True, reminders_fn=store.summarize,
+                  reminders_parts_fn=store.summarize_parts)
         res = ex.run(self._req())
         self.assertTrue(res.ok)
         self.assertEqual(res.payload["answer"],
                          "You have 2 reminders. 1. take out the trash. 2. call Mom.")
+        self.assertEqual(res.payload["answer_parts"], [
+            "You have 2 reminders.",
+            "1. take out the trash.",
+            "2. call Mom.",
+        ])
         self.assertFalse(res.side_effects)
 
     def test_no_store_returns_neutral_line(self):
@@ -258,6 +274,7 @@ class DefaultOrchestratorWiringTests(unittest.TestCase):
         # The info executor must read from the same store.
         info = orch._executors["info"]
         self.assertEqual(info.reminders_fn, store.summarize)
+        self.assertEqual(info.reminders_parts_fn, store.summarize_parts)
         # The remind executor must write to the same store.
         remind = orch._executors["remind"]
         self.assertIs(remind.store, store)

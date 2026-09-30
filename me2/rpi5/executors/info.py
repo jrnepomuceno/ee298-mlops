@@ -19,10 +19,12 @@ class InfoExecutor(Executor):
 
     def __init__(self, dry_run: bool = True,
                  weather_fn: Callable[[], str] | None = None,
-                 reminders_fn: Callable[[], str] | None = None) -> None:
+                 reminders_fn: Callable[[], str] | None = None,
+                 reminders_parts_fn: Callable[[], list[str]] | None = None) -> None:
         super().__init__(dry_run)
         self.weather_fn = weather_fn
         self.reminders_fn = reminders_fn
+        self.reminders_parts_fn = reminders_parts_fn
 
     def run(self, req: ActionRequest) -> ExecutionResult:
         # Info queries always produce a spoken answer, even in dry-run, because
@@ -62,7 +64,14 @@ class InfoExecutor(Executor):
             # Reading reminders is a local, offline operation (no network), so
             # we answer from the store even in dry-run -- the "action" IS the
             # list. Without a store attached we fall back to a neutral line.
-            if self.reminders_fn is not None:
+            answer_parts = None
+            if self.reminders_parts_fn is not None:
+                try:
+                    answer_parts = self.reminders_parts_fn()
+                    answer = " ".join(answer_parts)
+                except Exception as exc:  # noqa: BLE001
+                    answer = f"Could not read reminders: {exc}"
+            elif self.reminders_fn is not None:
                 try:
                     answer = self.reminders_fn()
                 except Exception as exc:  # noqa: BLE001
@@ -75,6 +84,9 @@ class InfoExecutor(Executor):
                                    action_code=req.action_code,
                                    detail=f"unsupported info action {req.action_code}",
                                    side_effects=False)
+        payload = {"answer": answer}
+        if req.action_code == "query.reminders" and answer_parts is not None:
+            payload["answer_parts"] = answer_parts
         return ExecutionResult(ok=True, intent=req.intent, category=self.category,
                                action_code=req.action_code, detail=detail,
-                               side_effects=False, payload={"answer": answer})
+                               side_effects=False, payload=payload)

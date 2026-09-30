@@ -59,6 +59,25 @@ class WavPreRollTests(unittest.TestCase):
             finally:
                 Path(padded_path).unlink(missing_ok=True)
 
+    def test_zero_preroll_keeps_audio_unpadded(self):
+        sample_rate = 1000
+        original = b"\x11\x22" * 4
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.wav"
+            with wave.open(str(source_path), "wb") as source:
+                source.setnchannels(1)
+                source.setsampwidth(2)
+                source.setframerate(sample_rate)
+                source.writeframes(original)
+
+            padded_path = _with_silence_preroll(str(source_path), preroll_ms=0)
+            try:
+                with wave.open(padded_path, "rb") as padded:
+                    self.assertEqual(padded.getnframes(), 4)
+                    self.assertEqual(padded.readframes(4), original)
+            finally:
+                Path(padded_path).unlink(missing_ok=True)
+
     def test_prepends_configured_silence_to_16bit_pcm(self):
         self._check_padded(sample_width=2, expected_silence=b"\x00\x00")
 

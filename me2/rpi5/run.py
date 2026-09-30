@@ -625,6 +625,39 @@ def main() -> int:
                     }
                     return
 
+                if (result.get("intent") == "what_reminders" and piper_tts
+                        and wav_player and payload.get("answer_parts")):
+                    segments = payload["answer_parts"]
+                    temp_paths = []
+                    try:
+                        for segment in segments:
+                            with tempfile.NamedTemporaryFile(
+                                    prefix="pi5-vcm-reminder-", suffix=".wav",
+                                    delete=False) as temp:
+                                temp_paths.append(temp.name)
+                            piper_tts.synthesize(segment, temp_paths[-1])
+                        playback = []
+                        for index, path in enumerate(temp_paths):
+                            preroll_ms = 750 if index == 0 else 0
+                            playback.append(_ducked_play(
+                                lambda path=path, preroll_ms=preroll_ms:
+                                    wav_player.play(path, preroll_ms=preroll_ms),
+                                kind="tts"))
+                            if index + 1 < len(temp_paths):
+                                time.sleep(0.5)
+                        current_event["tts"] = {
+                            "played": True,
+                            "source": "piper",
+                            "text": getattr(action, "reply_text", ""),
+                            "segments": len(temp_paths),
+                            "inter_item_pause_ms": 800,
+                            "playback": playback,
+                        }
+                    finally:
+                        for path in temp_paths:
+                            os.unlink(path)
+                    return
+
                 # Dynamic (Piper TTS) intents: the spoken value is computed at
                 # runtime (clock, live weather, reminder list), so it must be
                 # synthesized from text rather than played from a static WAV.

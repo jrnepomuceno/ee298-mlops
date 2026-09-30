@@ -68,8 +68,8 @@ class WavPlayer:
         player_command.append(path)
         return player_command
 
-    def play(self, path: str) -> dict[str, Any]:
-        playback_path = _with_silence_preroll(path)
+    def play(self, path: str, *, preroll_ms: int = PRE_ROLL_MS) -> dict[str, Any]:
+        playback_path = _with_silence_preroll(path, preroll_ms)
         player_command = self._command(playback_path)
         try:
             subprocess.run(player_command, stdout=subprocess.DEVNULL,
@@ -80,7 +80,7 @@ class WavPlayer:
         finally:
             os.unlink(playback_path)
         return {"status": "played", "wav": path, "player": player_command,
-                "preroll_ms": PRE_ROLL_MS}
+                "preroll_ms": preroll_ms}
 
     def play_async(self, path: str) -> dict[str, Any]:
         """Start playback and return without waiting for the WAV to finish."""

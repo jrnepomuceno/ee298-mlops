@@ -184,16 +184,20 @@ class ReminderStore:
             You have 2 reminders. 1. take out the trash. 2. call Mom.
             You have 3 reminders. 1. a. 2. b. 3. c.
         """
+        return " ".join(self.summarize_parts())
+
+    def summarize_parts(self) -> list[str]:
+        """Return speech-sized reminder segments for paced playback."""
         with self._lock:
             records = list(self._records)
         if not records:
-            return "You have no reminders."
+            return ["You have no reminders."]
         n = len(records)
         notes = [r["note"].strip() for r in records]
         # Fall back to a generic label for any blank note so the item still
         # reads naturally (the model can't always fill the note).
         notes = [note if note else "reminder" for note in notes]
         if n == 1:
-            return f"You have 1 reminder: {notes[0]}."
-        items = ". ".join(f"{i}. {note}" for i, note in enumerate(notes, start=1))
-        return f"You have {n} reminders. {items}."
+            return [f"You have 1 reminder: {notes[0]}."]
+        return ([f"You have {n} reminders."]
+                + [f"{i}. {note}." for i, note in enumerate(notes, start=1)])

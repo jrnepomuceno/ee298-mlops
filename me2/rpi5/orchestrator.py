@@ -201,7 +201,9 @@ def default_orchestrator(*, rgb: Any | None = None,
         "comms": CommsExecutor(dry_run, dialer=dialer),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn,
                              reminders_fn=(reminder_store.summarize
-                                           if reminder_store is not None else None)),
+                                           if reminder_store is not None else None),
+                             reminders_parts_fn=(reminder_store.summarize_parts
+                                                 if reminder_store is not None else None)),
         "volume": VolumeExecutor(dry_run, controller=volume_controller),
     }
     return Orchestrator(ex, rgb=rgb, speak=speak, on_event=on_event)
