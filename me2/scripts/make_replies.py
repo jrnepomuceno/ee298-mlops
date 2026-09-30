@@ -89,6 +89,7 @@ REPLY_TEXT = {
     "mute":             "Muting the output.",
     "oov":              "I did not recognise that command.",
 }
+PIPER_ONLY_INTENTS = {"pause_music", "stop_music"}
 
 # Every intent in config.INTENTS must have a spoken reply WAV. This is the
 # completeness contract that was previously violated (volume_up/down, mute and
@@ -354,6 +355,9 @@ def main() -> int:
     elif espeak is not None:
         print(f"Synthesising {len(REQUIRED_INTENTS)} spoken replies with espeak-ng")
         for intent in sorted(REQUIRED_INTENTS):
+            if intent in PIPER_ONLY_INTENTS:
+                print(f"  keeping {intent}.wav: Piper voice required")
+                continue
             dest = os.path.join(out_dir, f"{intent}.wav")
             settings = REPLY_SYNTHESIS.get(intent, {})
             if synth_reply(espeak, REPLY_TEXT[intent], dest,
