@@ -33,6 +33,7 @@ class RgbController:
     def __init__(self, executable: str | None = None) -> None:
         self.executable = executable
         self._cycle: subprocess.Popen[Any] | None = None
+        self._timer_alert = False
 
     @property
     def enabled(self) -> bool:
@@ -60,15 +61,27 @@ class RgbController:
     def speaking(self) -> dict[str, Any]:
         return self.animate("00FF00", "tts", speed=3)
 
+    def timer_alert(self) -> dict[str, Any]:
+        self._timer_alert = True
+        return self.animate("FF0000", "timer_alarm", speed=5, mode="pulse")
+
+    def clear_timer_alert(self) -> dict[str, Any]:
+        self._timer_alert = False
+        return self.idle()
+
     def off(self) -> dict[str, Any]:
         return self.idle()
 
     def solid(self, color: str, state: str) -> dict[str, Any]:
+        if self._timer_alert and state != "timer_alarm":
+            return {"status": "suppressed", "state": state, "command": None}
         self._stop_cycle()
         self._stop_quadcast_process()
         return self._run("solid", color, state=state)
 
     def cycle(self, state: str) -> dict[str, Any]:
+        if self._timer_alert and state != "timer_alarm":
+            return {"status": "suppressed", "state": state, "command": None}
         self._stop_cycle()
         self._stop_quadcast_process()
         if not self.enabled:
@@ -81,6 +94,8 @@ class RgbController:
 
     def animate(self, color: str, state: str, speed: int,
                 mode: str = "wave") -> dict[str, Any]:
+        if self._timer_alert and state != "timer_alarm":
+            return {"status": "suppressed", "state": state, "command": None}
         self._stop_cycle()
         self._stop_quadcast_process()
         if not self.enabled:
@@ -92,6 +107,7 @@ class RgbController:
         return {"status": "applied", "state": state, "command": command}
 
     def close(self) -> None:
+        self._timer_alert = False
         self.idle()
 
     def _run(self, mode: str, value: str, state: str) -> dict[str, Any]:

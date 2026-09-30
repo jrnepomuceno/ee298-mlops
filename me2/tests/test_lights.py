@@ -14,7 +14,7 @@ from unittest import mock
 
 from rpi5.facade import decode
 from rpi5.rgb import (HyperxDuoCastDriver, LightDriver, LIGHT_DRIVERS,
-                      make_light_driver)
+                      RgbController, make_light_driver)
 from rpi5.executors.light import LightExecutor
 from rpi5.orchestrator import default_orchestrator
 
@@ -123,6 +123,40 @@ class TestHyperxDuoCastDriver(unittest.TestCase):
     def test_close_turns_off(self):
         self.drv.close()
         self.assertEqual(self.fake.calls[-1][2], "0")
+
+
+class TestRgbTimerAlert(unittest.TestCase):
+    def setUp(self):
+        self.rgb = RgbController(executable="/opt/bin/quadcastrgb")
+        self.fake = FakeRun()
+        self.run_patcher = mock.patch("rpi5.rgb.subprocess.run", self.fake)
+        self.popen_patcher = mock.patch("rpi5.rgb.subprocess.Popen")
+        self.run_patcher.start()
+        self.popen = self.popen_patcher.start()
+        self.addCleanup(self.run_patcher.stop)
+        self.addCleanup(self.popen_patcher.stop)
+
+    def test_timer_alert_pulses_red_and_survives_other_states(self):
+        self.rgb.timer_alert()
+        self.popen.assert_called_once()
+        self.assertEqual(self.popen.call_args.args[0], [
+            "/opt/bin/quadcastrgb", "-s", "5", "pulse", "FF0000",
+        ])
+
+        self.rgb.wake()
+        self.rgb.processing()
+        self.rgb.speaking()
+        self.rgb.idle()
+        self.popen.assert_called_once()
+        self.assertEqual(len(self.fake.calls), 1)
+
+        self.rgb.clear_timer_alert()
+        self.assertEqual(self.fake.calls[-1][1:], ["solid", "0"])
+
+    def test_close_clears_timer_alert(self):
+        self.rgb.timer_alert()
+        self.rgb.close()
+        self.assertEqual(self.fake.calls[-1][1:], ["solid", "0"])
 
 
 class TestLightExecutor(unittest.TestCase):

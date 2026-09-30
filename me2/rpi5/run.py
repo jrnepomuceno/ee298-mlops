@@ -392,6 +392,8 @@ def main() -> int:
                 announce_timer_expiry,
                 announce_interval_s=10.0,
                 ring_gap_s=1.0,
+                on_started=rgb.timer_alert,
+                on_stopped=rgb.clear_timer_alert,
             )
             keepalive_enabled = set_demo_audio_keepalive(True)
             if keepalive_enabled:

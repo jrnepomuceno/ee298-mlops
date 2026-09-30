@@ -298,6 +298,23 @@ class TimerExpiryTests(unittest.TestCase):
 
 
 class TimerAlarmLoopTests(unittest.TestCase):
+    def test_start_and_stop_callbacks_fire_once(self):
+        callbacks = []
+        alarm = TimerAlarm(
+            lambda: None,
+            lambda: None,
+            ring_gap_s=0.01,
+            on_started=lambda: callbacks.append("started"),
+            on_stopped=lambda: callbacks.append("stopped"),
+        )
+
+        self.assertTrue(alarm.start())
+        self.assertFalse(alarm.start())
+        self.assertTrue(alarm.wait_first_ring(timeout=1.0))
+        self.assertTrue(alarm.stop())
+        self.assertFalse(alarm.stop())
+        self.assertEqual(callbacks, ["started", "stopped"])
+
     def test_announces_immediately_and_repeats_until_stopped(self):
         announcements = []
         rings = []

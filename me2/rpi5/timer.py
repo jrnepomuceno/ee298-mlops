@@ -247,13 +247,17 @@ class TimerAlarm:
     def __init__(self, play_ring: Callable[[], None],
                  announce: Callable[[], None],
                  announce_interval_s: float = 10.0,
-                 ring_gap_s: float = 0.5) -> None:
+                 ring_gap_s: float = 0.5,
+                 on_started: Callable[[], None] | None = None,
+                 on_stopped: Callable[[], None] | None = None) -> None:
         if announce_interval_s <= 0 or ring_gap_s < 0:
             raise ValueError("announce interval must be positive and ring gap non-negative")
         self.play_ring = play_ring
         self.announce = announce
         self.announce_interval_s = announce_interval_s
         self.ring_gap_s = ring_gap_s
+        self.on_started = on_started
+        self.on_stopped = on_stopped
         self._stop = threading.Event()
         self._paused = threading.Event()
         self._started = threading.Event()
@@ -277,6 +281,8 @@ class TimerAlarm:
             self._first_ring.clear()
             self._thread = threading.Thread(
                 target=self._run, name="pi5-timer-alarm", daemon=True)
+            if self.on_started is not None:
+                self._invoke(self.on_started, "start callback")
             self._thread.start()
             return True
 
@@ -303,8 +309,11 @@ class TimerAlarm:
             thread = self._thread
             if thread is None or not thread.is_alive():
                 return False
+            notify_stopped = not self._stop.is_set()
             self._stop.set()
             self._paused.clear()
+        if notify_stopped and self.on_stopped is not None:
+            self._invoke(self.on_stopped, "stop callback")
         if thread is not threading.current_thread():
             thread.join(timeout=timeout)
         return True
