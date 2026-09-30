@@ -126,6 +126,12 @@ class MockIntentTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "timer-seconds must be between 1 and 30"):
                 mock_run_main()
 
+    def test_live_rgb_requires_live_timer(self) -> None:
+        with mock.patch("sys.argv", ["mock_run", "--intent", "set_timer", "--live-rgb",
+                                     "--rgb-executable", "/opt/bin/quadcastrgb"]):
+            with self.assertRaisesRegex(SystemExit, "requires --live-timer"):
+                mock_run_main()
+
     def test_live_call_requires_explicit_confirmation(self) -> None:
         with mock.patch("sys.argv", ["mock_run", "--intent", "call", "--live-call",
                                      "--mock-contact", "+15551234567"]):

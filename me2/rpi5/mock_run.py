@@ -18,7 +18,7 @@ from .harness import FacadePipeline
 from .mock_inference import MOCK_SLOTS, MockInference
 from .orchestrator import default_orchestrator
 from .calls import make_dialer, normalize_target
-from .rgb import make_light_driver
+from .rgb import RgbController, make_light_driver
 from .tts import PiperTts, WavPlayer
 from .timer import TimerAlarm, TimerManager, TimerState
 from .volume import VolumeController
@@ -65,6 +65,10 @@ def parse_args() -> argparse.Namespace:
                         help="adjust the real master output for one volume intent, then restore it")
     parser.add_argument("--live-timer", action="store_true",
                         help="start/cancel a real process-local timer for a timer intent")
+    parser.add_argument("--live-rgb", action="store_true",
+                        help="show the timer alarm cue on a real RGB controller")
+    parser.add_argument("--rgb-executable", default=None,
+                        help="QuadcastRGB executable used by --live-rgb")
     parser.add_argument("--timer-seconds", type=int, default=3,
                         help="short test timer duration in seconds (1-30)")
     parser.add_argument("--ring-seconds", type=int, default=3,
@@ -101,7 +105,7 @@ def main() -> int:
         raise SystemExit("--microphone requires one explicit --intent")
 
     live_flags = (args.live_speaker, args.live_lights, args.live_volume,
-                  args.live_timer,
+                  args.live_timer, args.live_rgb,
                   args.live_weather, args.live_call)
     if any(live_flags) and args.intent == "all":
         raise SystemExit("live peripheral tests require one explicit --intent")
@@ -121,6 +125,15 @@ def main() -> int:
             raise SystemExit("--timer-seconds must be between 1 and 30")
         if not 1 <= args.ring_seconds <= 30:
             raise SystemExit("--ring-seconds must be between 1 and 30")
+    if args.live_rgb:
+        if not args.live_timer:
+            raise SystemExit("--live-rgb requires --live-timer")
+        if args.intent not in {"set_timer", "stop_timer"}:
+            raise SystemExit("--live-rgb requires a timer intent")
+        if not args.rgb_executable or not (
+                Path(args.rgb_executable).is_file() or
+                shutil.which(args.rgb_executable)):
+            raise SystemExit("--live-rgb requires an available --rgb-executable")
     if args.live_weather and args.intent != "what_weather":
         raise SystemExit("--live-weather requires --intent what_weather")
     if args.live_call:
@@ -165,6 +178,11 @@ def main() -> int:
         light_driver = make_light_driver(args.light_driver, args.light_executable)
         if light_driver is None or not light_driver.available():
             raise SystemExit("selected light driver is unavailable")
+
+    rgb_controller = (RgbController(args.rgb_executable)
+                      if args.live_rgb else None)
+    timer_rgb_report = ({"alert_started": None, "alert_stopped": None}
+                        if rgb_controller is not None else None)
 
     dialer = None
     if args.live_call:
@@ -269,11 +287,19 @@ def main() -> int:
                 timer_report["expiry_error"] = str(exc)
                 raise
 
+        def start_timer_rgb_alert() -> None:
+            timer_rgb_report["alert_started"] = rgb_controller.timer_alert()
+
+        def stop_timer_rgb_alert() -> None:
+            timer_rgb_report["alert_stopped"] = rgb_controller.clear_timer_alert()
+
         timer_alarm = TimerAlarm(
             play_timer_ring,
             announce_timer_expiry,
             announce_interval_s=10.0,
             ring_gap_s=1.0,
+            on_started=(start_timer_rgb_alert if rgb_controller is not None else None),
+            on_stopped=(stop_timer_rgb_alert if rgb_controller is not None else None),
         )
 
         def on_timer_expire(state: TimerState) -> None:
@@ -286,7 +312,7 @@ def main() -> int:
     orchestrator = default_orchestrator(
         dry_run=not (args.live_lights or args.live_volume or args.live_timer or
                      args.live_weather or args.live_call),
-        rgb=rgb,
+        rgb=rgb_controller or rgb,
         speak=speak,
         on_event=events.append,
         light_driver=light_driver,
@@ -371,6 +397,7 @@ def main() -> int:
                 "microphone": args.microphone,
                 "speaker": args.live_speaker,
                 "lights": args.live_lights,
+                "timer_rgb": args.live_rgb,
                 "weather_api": args.live_weather,
                 "sip_call": args.live_call,
                 "timer": args.live_timer,
@@ -379,6 +406,7 @@ def main() -> int:
             "mock_intents": [event.get("intent") for event in events],
             "microphone_capture": microphone_capture,
             "timer": timer_report,
+            "timer_rgb": timer_rgb_report,
             "volume": volume_report,
             "events": events,
             "spoken_replies": spoken,
@@ -398,6 +426,8 @@ def main() -> int:
             timer_manager.close()
         if timer_alarm is not None:
             timer_alarm.stop()
+        if rgb_controller is not None:
+            rgb_controller.close()
     return 0
 
 
