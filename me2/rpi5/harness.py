@@ -131,6 +131,7 @@ class FacadePipeline:
                  *, threshold: float = 0.75, dry_run: bool = True,
                  weather_fn: "Callable[[], str] | None" = None,
                  timer_manager: Any | None = None,
+                 timer_alarm: Any | None = None,
                  reminder_store: Any | None = None,
                  volume_controller: Any | None = None,
                  media_player: Any | None = None,
@@ -140,6 +141,7 @@ class FacadePipeline:
                  dialer: Any | None = None) -> None:
         self.orchestrator = orchestrator or default_orchestrator(
             dry_run=dry_run, weather_fn=weather_fn, timer_manager=timer_manager,
+            timer_alarm=timer_alarm,
             reminder_store=reminder_store, volume_controller=volume_controller,
             media_player=media_player, media_volume=media_volume,
             media_before_play=media_before_play,

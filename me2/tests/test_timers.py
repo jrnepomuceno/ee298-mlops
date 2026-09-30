@@ -12,6 +12,7 @@ import unittest
 from datetime import timedelta
 
 from rpi5.facade import decode
+from rpi5.harness import FacadePipeline
 from rpi5.timer import TimerAlarm, TimerManager
 from rpi5.executors.timer import TimerExecutor, _spoken_set
 from rpi5.orchestrator import default_orchestrator
@@ -176,6 +177,17 @@ class TimerFallbackTests(unittest.TestCase):
         self.assertFalse(res.ok)
         self.assertIn("no TimerManager", res.detail)
         self.assertFalse(res.side_effects)
+
+
+class FacadePipelineTimerAlarmTests(unittest.TestCase):
+    def test_timer_alarm_is_forwarded_to_timer_executor(self):
+        alarm = TimerAlarm(lambda: None, lambda: None)
+        pipeline = FacadePipeline(
+            dry_run=False,
+            timer_manager=TimerManager(),
+            timer_alarm=alarm,
+        )
+        self.assertIs(pipeline.orchestrator._executors["timer"].alarm, alarm)
 
     def test_dry_run_has_no_side_effects(self):
         ex = TimerExecutor(dry_run=True, manager=RecordingManager())
