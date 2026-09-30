@@ -10,22 +10,24 @@ This matrix tracks task/harness behavior independently of model accuracy. “Moc
 | `turn_on_lights` | Passed | Passed | DuoCast on command; cleanup restores off. |
 | `turn_off_lights` | Passed | Passed | DuoCast off command. |
 | `dim_lights` | Passed | Passed | Tested at 40%; cleanup restores off. |
-| `set_temperature` | Passed | Mic-to-Piper passed | Latest retry captured 1.23 s from HyperX DuoCast; forced mock 25 C and Piper played “Temperature set to 25 degrees” with 750 ms silence pre-roll; user confirmed the first word was audible. No thermostat control; `side_effects=false`. |
-| `play_music` | Passed | Not tested | Requires a real music directory/player selection. |
-| `pause_music` | Passed | Not tested | Live media playback not enabled. |
-| `stop_music` | Passed | Not tested | Live media playback not enabled. |
-| `set_timer` | Passed | Passed | Pi TimerManager expired a 3 s countdown; persistent TimerAlarm looped the chime and announced “Your timer is up.”; mock `stop_timer` stopped it after the test ring window. |
+| `set_temperature` | Passed | Mic-to-Piper passed | Forced 25 C; Piper spoke “Temperature set to 25 degrees.” with 750 ms silence pre-roll; user confirmed the first word was audible. No thermostat control; `side_effects=false`. |
+| `play_music` | Passed | Passed | Pi `ffplay` played Circus Charlie tracks. Tested 10-second playback; Piper announced “Playing Circus Charlie - 1” before playback started, with no duplicate reply. |
+| `pause_music` | Passed | Passed | Paused active `ffplay` playback; Piper spoke “Music paused.” Static fallback WAV was rendered with the Pi Piper voice. |
+| `stop_music` | Passed | Passed | Stopped active `ffplay` playback; Piper spoke “Music stopped.” Static fallback WAV was rendered with the Pi Piper voice. |
+| `set_timer` | Passed | Passed | 5-second countdown expired, looped the chime, and spoke “Your timer is up.” `stop_timer` stopped ringing. Piper also spoke “Setting timer for 2 minutes. Starting now.” in a live start-then-cancel check. Timer starts when the action runs, so its confirmation speech overlaps the countdown. |
 | `set_alarm` | Passed | Not tested | Alarm scheduling/expiry playback not exercised live. |
-| `stop_timer` | Passed | Passed | Mock stop intent stopped an expired ringing alarm; separate pre-expiry cancel test verified no later expiry/ringtone. |
+| `stop_timer` | Passed | Passed | Stopped an expired ringing alarm and spoke “Timer stopped.” Separate pre-expiry cancel test confirmed no later expiry or ringtone. |
 | `remind` | Passed | Not tested | Persistent reminder write/read not exercised in this pass. |
 | `call` | Passed | Not tested | No SIP call placed; requires a test target and explicit confirmation. |
 | `what_time` | Passed | Passed | Piper synthesized and played the reply through `pw-play` to the Pi's default speaker. |
-| `what_weather` | Passed | Passed | One OpenWeatherMap request succeeded for Quezon City: 33 C, cloudy. |
+| `what_weather` | Passed | Passed | Live OpenWeatherMap request for Quezon City returned 32 C, rainy; Piper reply playback passed. API key came from the Pi config and was not printed. |
 | `what_reminders` | Passed | Not tested | Live reminder-store query not exercised in this pass. |
-| `volume_up` | Passed | Passed | Pi master volume 58% → 68%; snapshot restored to 58%. |
-| `volume_down` | Passed | Passed | Pi master volume 58% → 48%; snapshot restored to 58%. |
+| `volume_up` | Passed | Passed | Pi master volume 73% → 83%; Piper reply played; snapshot restored to 73%. |
+| `volume_down` | Passed | Passed | Pi master volume 73% → 63%; Piper reply played; snapshot restored to 73%. |
 | `mute` | Disabled | Disabled | ONNX label retained for index compatibility; facade, mock catalog, and harness reject it. |
 | `oov` | Passed | Rejection | OOV/unknown intents now reply “I don't understand.” |
+
+The newer training package contains a `NEXT` label, but it is not part of the deployed model or the current intent catalog. The training-only model is not compatible with the Pi's deployed ONNX contract; there is no production `next_music` intent yet.
 
 ## Shared Rejection Cases
 
@@ -38,11 +40,13 @@ This matrix tracks task/harness behavior independently of model accuracy. “Moc
 
 ## Test Evidence
 
-The Pi-side focused suites passed during this test cycle: facade 34 tests, HVAC 11, mock intents 14, lights 21, playback/pre-roll 6, and timer/TimerAlarm 30. Live timer start/expiry and cancellation were exercised with mocked recognition; production ringing continues until the model returns `stop_timer`. This validates timer/task/audio wiring, not model recognition quality.
+Latest focused Pi test runs passed: media 26 tests, mock intents 15, timers 31, lights 23, and replies 10. The reply asset validator also passed after the timer and music WAV updates. These runs validate task, executor, audio, and peripheral wiring with forced/mock intents, not model recognition accuracy.
 
-The DuoCast uses a persistent `quadcastrgb` process. The driver now stops its prior process before changing state and uses the installed CLI's documented `solid 0` off command. The ring was confirmed left off after testing. The wireless speaker appears to need a longer active stream before speech; 50 ms was insufficient, while the user confirmed the initial word was audible with 750 ms digital-silence pre-roll. The weather key must be exported to the Python process; it was exported only for the one successful request and was not printed.
+The timer expiry cue uses the DuoCast's native red `pulse` mode. The Pi reported the pulse command applied and cleared the ring on `stop_timer`, but the user has not confirmed seeing the visual cue. `quadcastrgb --help` omits `pulse`; the installed man page and native implementation confirm it is supported. The controller stops its previous process and uses `solid 0` to turn the ring off.
 
-The mock runner's `--live-volume` mode snapshots the Pi master level before one `volume_up` or `volume_down` intent, records the step, and restores the snapshot in cleanup. Both commands were tested sequentially from 58%; the final `wpctl` readback was 58%.
+The Pi Piper voice is used for the `dim_lights`, `set_timer`, `pause_music`, and `stop_music` fallback WAVs. `dim_lights.wav` says “Dimming lights.” with a per-intent slower setting; the WAV was generated on the Pi with Piper and verified byte-identical after pull. The pause/stop WAVs were also rendered on the Pi, and the reply generator skips these Piper-only assets when run on a host that only has espeak-ng.
+
+The mock runner's `--live-volume` mode snapshots the Pi master level before one `volume_up` or `volume_down` intent, records the step, and restores the snapshot in cleanup. Both commands were tested sequentially from 73%; final `wpctl` readback was 73%.
 
 ## Updating This Matrix
 
