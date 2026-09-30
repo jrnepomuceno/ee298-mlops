@@ -271,7 +271,7 @@ class ExecutorTests(unittest.TestCase):
         self.assertIn("Paused", res.detail)
         res = ex.run(self._decode("stop_music"))
         self.assertTrue(res.ok)
-        self.assertEqual(res.detail, "Stopped the music")
+        self.assertEqual(res.detail, "Music stopped")
 
     def test_stop_when_idle(self):
         ex = MediaExecutor(dry_run=False, player=self.ctrl)

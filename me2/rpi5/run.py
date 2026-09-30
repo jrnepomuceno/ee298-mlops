@@ -592,8 +592,9 @@ def main() -> int:
                 # synthesized from text rather than played from a static WAV.
                 # Everything else keeps the pre-baked reply WAV.
                 # pause_music / stop_music are dynamic too: the spoken line
-                # depends on whether music is actually playing ("No music is
+                    # depends on whether music is actually playing ("No music is
                 # playing." vs "Paused X" / "Stopped the music"), so it must be
+                    # playing." vs "Paused X" / "Music stopped"), so it must be
                 # synthesised from the live reply rather than a static WAV.
                 _dynamic_intents = ("what_time", "what_weather", "what_reminders",
                                     "pause_music", "stop_music")

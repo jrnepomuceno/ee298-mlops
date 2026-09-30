@@ -51,7 +51,7 @@ class MediaExecutor(Executor):
                     detail = "No music is playing."
             elif code == "media.stop":
                 if ctrl.stop():
-                    detail = "Stopped the music"
+                    detail = "Music stopped"
                 else:
                     detail = "No music is playing."
             else:
