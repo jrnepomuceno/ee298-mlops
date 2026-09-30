@@ -21,7 +21,7 @@ This matrix tracks task/harness behavior independently of model accuracy. “Moc
 | `call` | Passed | Not tested | No SIP call placed; requires a test target and explicit confirmation. |
 | `what_time` | Passed | Passed | Piper synthesized and played the reply through `pw-play` to the Pi's default speaker. |
 | `what_weather` | Passed | Passed | Live OpenWeatherMap request for Quezon City returned 32 C, rainy; Piper reply playback passed. API key came from the Pi config and was not printed. |
-| `what_reminders` | Passed | Not tested | Live reminder-store query not exercised in this pass. |
+| `what_reminders` | Passed | Passed | Three reminders were persisted to an isolated Pi JSON store, reloaded, and spoken as an intro plus three item clips with 800 ms pauses. Existing user reminders were untouched. |
 | `volume_up` | Passed | Passed | Pi master volume 73% → 83%; Piper reply played; snapshot restored to 73%. |
 | `volume_down` | Passed | Passed | Pi master volume 73% → 63%; Piper reply played; snapshot restored to 73%. |
 | `mute` | Disabled | Disabled | ONNX label retained for index compatibility; facade, mock catalog, and harness reject it. |
@@ -40,7 +40,7 @@ The newer training package contains a `NEXT` label, but it is not part of the de
 
 ## Test Evidence
 
-Latest focused Pi test runs passed: media 26 tests, mock intents 15, timers 31, lights 23, and replies 10. The reply asset validator also passed after the timer and music WAV updates. These runs validate task, executor, audio, and peripheral wiring with forced/mock intents, not model recognition accuracy.
+Latest focused Pi test runs passed: media 26 tests, mock intents 15, timers 31, lights 23, replies 10, reminders 31, and TTS 7. The reply asset validator also passed after the timer and music WAV updates. These runs validate task, executor, audio, and peripheral wiring with forced/mock intents, not model recognition accuracy.
 
 The timer expiry cue uses the DuoCast's native red `pulse` mode. The Pi reported the pulse command applied and cleared the ring on `stop_timer`, but the user has not confirmed seeing the visual cue. `quadcastrgb --help` omits `pulse`; the installed man page and native implementation confirm it is supported. The controller stops its previous process and uses `solid 0` to turn the ring off.
 
