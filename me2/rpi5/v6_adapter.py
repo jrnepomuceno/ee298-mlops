@@ -25,7 +25,9 @@ V6_TO_RUNTIME_INTENT = {
 }
 
 V6_ACTION_LABELS = frozenset({
-    "PLAY_MUSIC", "PAUSE", "STOP", "TIME", "VOLUME_UP", "VOLUME_DOWN",
+    "PLAY_MUSIC", "WEATHER", "TIME", "LIGHT_ON", "LIGHT_OFF", "PAUSE",
+    "STOP", "VOLUME_UP", "VOLUME_DOWN", "LIST_REMINDERS", "TIMER",
+    "ALARM", "TEMPERATURE", "BRIGHTNESS", "CREATE_REMINDER",
 })
 
 
@@ -86,7 +88,7 @@ def adapt_v6_result(result: dict[str, Any], contract: dict[str, Any],
 
 def adapt_v6_action_result(result: dict[str, Any], contract: dict[str, Any],
                            slot_threshold: float = 0.75) -> dict[str, Any]:
-    """Expose only reviewed media and volume labels to action execution."""
+    """Expose v6 labels backed by active, validated project intents."""
     adapted = adapt_v6_result(result, contract, slot_threshold)
     if (result.get("intent") not in V6_ACTION_LABELS
             or adapted["intent"] == "oov"):
