@@ -41,9 +41,6 @@ except ImportError:  # pragma: no cover - run.py executed standalone
 
 
 LOGGER = logging.getLogger("pi5-vcm")
-WILLEN_RULE = (Path.home() / ".config" / "wireplumber" / "wireplumber.conf.d"
-               / "51-willen-no-idle-suspend.conf")
-WILLEN_RULE_DISABLED = WILLEN_RULE.with_suffix(".conf.disabled")
 
 
 def configure_logging() -> None:
@@ -73,27 +70,6 @@ def log(message: str, *, error: bool = False) -> None:
         LOGGER.error(message)
     else:
         LOGGER.info(message)
-
-
-def set_demo_audio_keepalive(enabled: bool) -> bool:
-    """Enable WILLEN keep-alive only for the live demo session."""
-    if shutil.which("systemctl") is None:
-        return False
-    if enabled:
-        if not WILLEN_RULE.exists() and WILLEN_RULE_DISABLED.exists():
-            WILLEN_RULE_DISABLED.rename(WILLEN_RULE)
-    elif WILLEN_RULE.exists():
-        WILLEN_RULE.rename(WILLEN_RULE_DISABLED)
-    else:
-        return False
-    subprocess.run(
-        ["systemctl", "--user", "restart", "wireplumber"],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        timeout=10,
-    )
-    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -393,7 +369,6 @@ def main() -> int:
                 "unreachable instead of placing calls")
     else:
         log("[calls] no dialer selected; call intent stays dry-run")
-    keepalive_enabled = False
     warming = not args.no_warmup
     try:
         if args.microphone or args.vcm_only:
@@ -484,9 +459,6 @@ def main() -> int:
                 on_started=rgb.timer_alert,
                 on_stopped=rgb.clear_timer_alert,
             )
-            keepalive_enabled = set_demo_audio_keepalive(True)
-            if keepalive_enabled:
-                log("[warming] WILLEN idle-suspend disabled for demo")
         if warming:
             log("[warming] loading checkpoint and warming model")
             rgb.warming(args.warmup_color)
@@ -903,13 +875,6 @@ def main() -> int:
             warmup_timer.cancel()
             if warmup_timer.is_alive():
                 warmup_timer.join(timeout=2)
-        if keepalive_enabled:
-            try:
-                set_demo_audio_keepalive(False)
-                log("[shutdown] WILLEN idle-suspend restored")
-            except (OSError, subprocess.SubprocessError) as exc:
-                log(f"[shutdown] failed to restore WILLEN idle-suspend: {exc}",
-                    error=True)
         if wav_player is not None:
             wav_player.close()
         if media_player is not None:
