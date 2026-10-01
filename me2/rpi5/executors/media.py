@@ -47,6 +47,7 @@ class MediaExecutor(Executor):
         try:
             if code == "media.play":
                 announced_before_play = False
+                was_paused = ctrl.is_paused
 
                 def announce_before_start(track_name: str) -> bool:
                     nonlocal announced_before_play
@@ -58,7 +59,8 @@ class MediaExecutor(Executor):
                     before_start=(announce_before_start
                                   if self.before_play is not None else None))
                 self._apply_media_volume()
-                detail = f"Playing {Path(name).stem}"
+                verb = "Resuming" if was_paused else "Playing"
+                detail = f"{verb} {Path(name).stem}"
             elif code == "media.pause":
                 if ctrl.pause():
                     detail = "Music paused"

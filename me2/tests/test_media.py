@@ -171,6 +171,32 @@ class TransportTests(unittest.TestCase):
         self.assertFalse(self.ctrl.is_paused)
         self.assertIn(signal.SIGCONT, self.runner.procs[-1].signals)
 
+    def test_play_after_pause_resumes_same_ffplay_track(self):
+        import signal
+        track = self.ctrl.play()
+        self.assertTrue(self.ctrl.pause())
+
+        resumed = self.ctrl.play()
+
+        self.assertEqual(resumed, track)
+        self.assertTrue(self.ctrl.is_playing)
+        self.assertFalse(self.ctrl.is_paused)
+        self.assertEqual(len(self.runner.calls), 1)
+        self.assertIn(signal.SIGCONT, self.runner.procs[0].signals)
+
+    def test_play_after_pause_restarts_same_fallback_track(self):
+        runner = FakeRunner()
+        ctrl = MediaPlayerController(self.tmp, player="pw-play", runner=runner,
+                                     rng=random.Random(0))
+        track = ctrl.play()
+        self.assertTrue(ctrl.pause())
+
+        resumed = ctrl.play()
+
+        self.assertEqual(resumed, track)
+        self.assertEqual(len(runner.calls), 2)
+        self.assertEqual(runner.calls[0][-1], runner.calls[1][-1])
+
     def test_stop_terminates(self):
         self.ctrl.play()
         self.assertTrue(self.ctrl.stop())
@@ -282,6 +308,21 @@ class ExecutorTests(unittest.TestCase):
         expected = f"Playing {Path(result.payload['track']).stem}"
         self.assertEqual(order, [expected, "player started"])
         self.assertEqual(result.detail, expected)
+        self.assertTrue(result.payload["announced_before_play"])
+
+    def test_play_music_resumes_paused_track(self):
+        first = self.ctrl.play()
+        self.assertTrue(self.ctrl.pause())
+        ex = MediaExecutor(
+            dry_run=False,
+            player=self.ctrl,
+            before_play=lambda name: name == first,
+        )
+
+        result = ex.run(self._decode("play_music"))
+
+        self.assertEqual(result.detail, f"Resuming {Path(first).stem}")
+        self.assertEqual(result.payload["track"], first)
         self.assertTrue(result.payload["announced_before_play"])
 
     def test_pause_then_stop(self):

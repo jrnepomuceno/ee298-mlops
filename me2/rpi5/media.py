@@ -154,21 +154,31 @@ class MediaPlayerController:
     # -- transport -------------------------------------------------------- #
     def play(self, directory: str | Path | None = None,
              before_start: Callable[[str], bool] | None = None) -> str:
-        """Start (or restart) playback of a random track.
+        """Resume a paused track, or start a random track otherwise.
 
-        Returns the track filename. Stops any currently running player first.
+        Returns the track filename. Stops any currently running player first,
+        except when resuming the paused track.
         ``before_start`` can announce the selected filename before audio begins.
         Raises :class:`MediaError` if the directory is empty or no player is
         available.
         """
         if directory is not None:
             self.directory = Path(directory).expanduser().resolve()
+        if self._paused and self._track is not None and directory is None:
+            track = self._track
+            if before_start is not None:
+                before_start(track.name)
+            if self.resume():
+                return track.name
         self.stop()  # never stack two players
         track = self._pick()
-        binary, base_args = _pick_player(self.player)
-        cmd = [binary, *base_args, str(track)]
         if before_start is not None:
             before_start(track.name)
+        return self._start_track(track)
+
+    def _start_track(self, track: Path) -> str:
+        binary, base_args = _pick_player(self.player)
+        cmd = [binary, *base_args, str(track)]
         LOGGER.info("[media] play %s via %s", track.name, binary)
         self._proc = self._runner(cmd)
         self._track = track
@@ -207,9 +217,12 @@ class MediaPlayerController:
             LOGGER.info("[media] resumed %s", self.current_track)
             return True
         # Fallback player: restart the remembered track from the top.
+        track = self._track
+        if track is None:
+            return False
         self._proc = None
         self._paused = False
-        self.play()
+        self._start_track(track)
         return True
 
     def stop(self) -> bool:

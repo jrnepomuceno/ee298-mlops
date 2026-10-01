@@ -372,7 +372,9 @@ def main() -> int:
                 nonlocal post_reply_until
                 if piper_tts is None or wav_player is None:
                     return False
-                reply_text = f"Playing {Path(track_name).stem}"
+                verb = ("Resuming" if media_player is not None
+                    and media_player.is_paused else "Playing")
+                reply_text = f"{verb} {Path(track_name).stem}"
                 with tempfile.NamedTemporaryFile(
                         prefix="pi5-vcm-music-", suffix=".wav", delete=False) as tmp:
                     tmp_path = tmp.name
