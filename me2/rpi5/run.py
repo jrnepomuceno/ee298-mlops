@@ -690,8 +690,10 @@ def main() -> int:
                             piper_tts.synthesize(segment, temp_paths[-1])
                         playback = []
                         for index, path in enumerate(temp_paths):
+                            preroll_ms = 750 if index == 0 else 0
                             playback.append(_ducked_play(
-                                lambda path=path: wav_player.play(path),
+                                lambda path=path, preroll_ms=preroll_ms:
+                                    wav_player.play(path, preroll_ms=preroll_ms),
                                 kind="tts"))
                             if index + 1 < len(temp_paths):
                                 time.sleep(0.2)

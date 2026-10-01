@@ -1,10 +1,12 @@
 """Tests for playback command construction without touching audio devices."""
 from __future__ import annotations
 
+import tempfile
 import unittest
-from unittest.mock import Mock, patch
+import wave
+from pathlib import Path
 
-from rpi5.tts import WavPlayer
+from rpi5.tts import PRE_ROLL_MS, WavPlayer, _with_silence_preroll
 
 
 class WavPlayerCommandTests(unittest.TestCase):
@@ -26,24 +28,61 @@ class WavPlayerCommandTests(unittest.TestCase):
         player = WavPlayer("afplay")
         self.assertEqual(player._command("reply.wav"), ["afplay", "reply.wav"])
 
-    @patch("rpi5.tts.subprocess.run")
-    def test_play_uses_original_wav_without_pre_roll(self, run: Mock) -> None:
-        result = WavPlayer("pw-play").play("reply.wav")
-        run.assert_called_once()
-        self.assertEqual(run.call_args.args[0], ["pw-play", "reply.wav"])
-        self.assertEqual(result["wav"], "reply.wav")
-        self.assertNotIn("preroll_ms", result)
 
-    @patch("rpi5.tts.subprocess.Popen")
-    def test_play_async_uses_original_wav_without_pre_roll(
-            self, popen: Mock) -> None:
-        popen.return_value = Mock()
-        player = WavPlayer("pw-play")
-        result = player.play_async("reply.wav")
-        self.assertEqual(popen.call_args.args[0], ["pw-play", "reply.wav"])
-        self.assertEqual(result["wav"], "reply.wav")
-        self.assertNotIn("preroll_ms", result)
-        player.close()
+class WavPreRollTests(unittest.TestCase):
+    def _check_padded(self, sample_width: int, expected_silence: bytes) -> None:
+        channels = 2
+        sample_rate = 1000
+        source_frames = 4
+        frame_bytes = channels * sample_width
+        original = bytes([0x11]) * (source_frames * frame_bytes)
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.wav"
+            with wave.open(str(source_path), "wb") as source:
+                source.setnchannels(channels)
+                source.setsampwidth(sample_width)
+                source.setframerate(sample_rate)
+                source.writeframes(original)
+
+            padded_path = _with_silence_preroll(str(source_path))
+            try:
+                with wave.open(padded_path, "rb") as padded:
+                    silence_frames = sample_rate * PRE_ROLL_MS // 1000
+                    self.assertEqual(padded.getnchannels(), channels)
+                    self.assertEqual(padded.getsampwidth(), sample_width)
+                    self.assertEqual(padded.getframerate(), sample_rate)
+                    self.assertEqual(padded.getnframes(), silence_frames + source_frames)
+                    data = padded.readframes(padded.getnframes())
+                silence_bytes = silence_frames * frame_bytes
+                self.assertEqual(data[:silence_bytes], expected_silence * silence_frames * channels)
+                self.assertEqual(data[silence_bytes:], original)
+            finally:
+                Path(padded_path).unlink(missing_ok=True)
+
+    def test_zero_preroll_keeps_audio_unpadded(self):
+        sample_rate = 1000
+        original = b"\x11\x22" * 4
+        with tempfile.TemporaryDirectory() as directory:
+            source_path = Path(directory) / "source.wav"
+            with wave.open(str(source_path), "wb") as source:
+                source.setnchannels(1)
+                source.setsampwidth(2)
+                source.setframerate(sample_rate)
+                source.writeframes(original)
+
+            padded_path = _with_silence_preroll(str(source_path), preroll_ms=0)
+            try:
+                with wave.open(padded_path, "rb") as padded:
+                    self.assertEqual(padded.getnframes(), 4)
+                    self.assertEqual(padded.readframes(4), original)
+            finally:
+                Path(padded_path).unlink(missing_ok=True)
+
+    def test_prepends_configured_silence_to_16bit_pcm(self):
+        self._check_padded(sample_width=2, expected_silence=b"\x00\x00")
+
+    def test_prepends_centered_silence_to_unsigned_8bit_pcm(self):
+        self._check_padded(sample_width=1, expected_silence=b"\x80")
 
 
 if __name__ == "__main__":

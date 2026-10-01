@@ -125,8 +125,10 @@ python -m rpi5.mock_run --intent set_temperature --temperature 25 \
 Speak any short phrase after the prompt. Audio is captured by VAD but its
 content is deliberately ignored; the selected mock intent and temperature
 drive the task/reply. This verifies microphone capture, audio-only HVAC routing,
-Piper synthesis, and speaker playback, not model recognition. WAV files are
-played directly without a digital-silence pre-roll.
+Piper synthesis, and speaker playback, not model recognition. Every WAV played
+by `WavPlayer` gets a 750 ms digital-silence pre-roll to allow the Bluetooth
+speaker to leave standby before speech and avoid clipping its first word; no
+noise is added.
 
 The speaker option synthesizes and plays the reply; the lights option uses the
 selected light driver; the weather option performs a real OpenWeatherMap
