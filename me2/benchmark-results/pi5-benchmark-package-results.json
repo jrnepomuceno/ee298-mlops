@@ -1,0 +1,626 @@
+{
+  "v6_int8": {
+    "model_name": "v6_int8",
+    "onnx_path": "/home/jdrnepomuceno9/MyProjects/ee298-mlops/me2/models/onnx/v6_15m/model_int8.onnx",
+    "model_size_mb": 3.34,
+    "threads": 2,
+    "peak_rss_mb": 77.6,
+    "latency_ms": {
+      "model_mean": 12.88,
+      "model_p50": 11.53,
+      "model_p95": 17.23,
+      "feature_mean": 7.34,
+      "feature_p95": 8.18,
+      "total_mean": 20.23,
+      "total_p95": 25.4
+    },
+    "rtf": {
+      "model_rtf": 0.0241,
+      "total_pipeline_rtf": 0.0379
+    },
+    "accuracy": {
+      "canonical_intent": {
+        "correct": 2,
+        "total": 42,
+        "accuracy": 0.0476,
+        "per_class": {
+          "LIGHT_ON": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIGHT_OFF": {
+            "total": 3,
+            "correct": 0
+          },
+          "BRIGHTNESS": {
+            "total": 3,
+            "correct": 0
+          },
+          "TEMPERATURE": {
+            "total": 3,
+            "correct": 0
+          },
+          "PLAY_MUSIC": {
+            "total": 3,
+            "correct": 2
+          },
+          "PAUSE": {
+            "total": 3,
+            "correct": 0
+          },
+          "STOP": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIMER": {
+            "total": 3,
+            "correct": 0
+          },
+          "ALARM": {
+            "total": 3,
+            "correct": 0
+          },
+          "CREATE_REMINDER": {
+            "total": 3,
+            "correct": 0
+          },
+          "CALL": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIME": {
+            "total": 3,
+            "correct": 0
+          },
+          "WEATHER": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIST_REMINDERS": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      },
+      "runtime_intent": {
+        "correct": 2,
+        "total": 48,
+        "accuracy": 0.0417,
+        "per_class": {
+          "turn_on_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "turn_off_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "dim_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_temperature": {
+            "total": 3,
+            "correct": 0
+          },
+          "play_music": {
+            "total": 3,
+            "correct": 2
+          },
+          "pause_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_alarm": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "remind": {
+            "total": 3,
+            "correct": 0
+          },
+          "call": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_time": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_weather": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_reminders": {
+            "total": 3,
+            "correct": 0
+          },
+          "oov": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      }
+    }
+  },
+  "v6_fp32": {
+    "model_name": "v6_fp32",
+    "onnx_path": "/home/jdrnepomuceno9/MyProjects/ee298-mlops/me2/models/onnx/v6_15m/model_fp32.onnx",
+    "model_size_mb": 7.58,
+    "threads": 2,
+    "peak_rss_mb": 78.5,
+    "latency_ms": {
+      "model_mean": 15.33,
+      "model_p50": 13.91,
+      "model_p95": 20.38,
+      "feature_mean": 7.28,
+      "feature_p95": 8.0,
+      "total_mean": 22.61,
+      "total_p95": 28.38
+    },
+    "rtf": {
+      "model_rtf": 0.0287,
+      "total_pipeline_rtf": 0.0424
+    },
+    "accuracy": {
+      "canonical_intent": {
+        "correct": 2,
+        "total": 42,
+        "accuracy": 0.0476,
+        "per_class": {
+          "LIGHT_ON": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIGHT_OFF": {
+            "total": 3,
+            "correct": 0
+          },
+          "BRIGHTNESS": {
+            "total": 3,
+            "correct": 0
+          },
+          "TEMPERATURE": {
+            "total": 3,
+            "correct": 0
+          },
+          "PLAY_MUSIC": {
+            "total": 3,
+            "correct": 2
+          },
+          "PAUSE": {
+            "total": 3,
+            "correct": 0
+          },
+          "STOP": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIMER": {
+            "total": 3,
+            "correct": 0
+          },
+          "ALARM": {
+            "total": 3,
+            "correct": 0
+          },
+          "CREATE_REMINDER": {
+            "total": 3,
+            "correct": 0
+          },
+          "CALL": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIME": {
+            "total": 3,
+            "correct": 0
+          },
+          "WEATHER": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIST_REMINDERS": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      },
+      "runtime_intent": {
+        "correct": 2,
+        "total": 48,
+        "accuracy": 0.0417,
+        "per_class": {
+          "turn_on_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "turn_off_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "dim_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_temperature": {
+            "total": 3,
+            "correct": 0
+          },
+          "play_music": {
+            "total": 3,
+            "correct": 2
+          },
+          "pause_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_alarm": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "remind": {
+            "total": 3,
+            "correct": 0
+          },
+          "call": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_time": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_weather": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_reminders": {
+            "total": 3,
+            "correct": 0
+          },
+          "oov": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      }
+    }
+  },
+  "v1_int8": {
+    "model_name": "v1_int8",
+    "onnx_path": "/home/jdrnepomuceno9/MyProjects/intent_v1/model_int8.onnx",
+    "model_size_mb": 3.26,
+    "threads": 2,
+    "peak_rss_mb": 79.0,
+    "latency_ms": {
+      "model_mean": 12.46,
+      "model_p50": 11.08,
+      "model_p95": 17.07,
+      "feature_mean": 7.24,
+      "feature_p95": 8.02,
+      "total_mean": 19.69,
+      "total_p95": 25.12
+    },
+    "rtf": {
+      "model_rtf": 0.0233,
+      "total_pipeline_rtf": 0.0369
+    },
+    "accuracy": {
+      "canonical_intent": {
+        "correct": 3,
+        "total": 42,
+        "accuracy": 0.0714,
+        "per_class": {
+          "LIGHT_ON": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIGHT_OFF": {
+            "total": 3,
+            "correct": 0
+          },
+          "BRIGHTNESS": {
+            "total": 3,
+            "correct": 0
+          },
+          "TEMPERATURE": {
+            "total": 3,
+            "correct": 0
+          },
+          "PLAY_MUSIC": {
+            "total": 3,
+            "correct": 2
+          },
+          "PAUSE": {
+            "total": 3,
+            "correct": 0
+          },
+          "STOP": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIMER": {
+            "total": 3,
+            "correct": 0
+          },
+          "ALARM": {
+            "total": 3,
+            "correct": 0
+          },
+          "CREATE_REMINDER": {
+            "total": 3,
+            "correct": 0
+          },
+          "CALL": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIME": {
+            "total": 3,
+            "correct": 1
+          },
+          "WEATHER": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIST_REMINDERS": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      },
+      "runtime_intent": {
+        "correct": 3,
+        "total": 48,
+        "accuracy": 0.0625,
+        "per_class": {
+          "turn_on_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "turn_off_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "dim_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_temperature": {
+            "total": 3,
+            "correct": 0
+          },
+          "play_music": {
+            "total": 3,
+            "correct": 2
+          },
+          "pause_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_alarm": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "remind": {
+            "total": 3,
+            "correct": 0
+          },
+          "call": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_time": {
+            "total": 3,
+            "correct": 1
+          },
+          "what_weather": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_reminders": {
+            "total": 3,
+            "correct": 0
+          },
+          "oov": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      }
+    }
+  },
+  "v1_fp32": {
+    "model_name": "v1_fp32",
+    "onnx_path": "/home/jdrnepomuceno9/MyProjects/intent_v1/model_fp32.onnx",
+    "model_size_mb": 7.31,
+    "threads": 2,
+    "peak_rss_mb": 79.5,
+    "latency_ms": {
+      "model_mean": 14.77,
+      "model_p50": 13.3,
+      "model_p95": 19.74,
+      "feature_mean": 7.23,
+      "feature_p95": 8.02,
+      "total_mean": 22.0,
+      "total_p95": 27.76
+    },
+    "rtf": {
+      "model_rtf": 0.0277,
+      "total_pipeline_rtf": 0.0412
+    },
+    "accuracy": {
+      "canonical_intent": {
+        "correct": 3,
+        "total": 42,
+        "accuracy": 0.0714,
+        "per_class": {
+          "LIGHT_ON": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIGHT_OFF": {
+            "total": 3,
+            "correct": 0
+          },
+          "BRIGHTNESS": {
+            "total": 3,
+            "correct": 0
+          },
+          "TEMPERATURE": {
+            "total": 3,
+            "correct": 0
+          },
+          "PLAY_MUSIC": {
+            "total": 3,
+            "correct": 2
+          },
+          "PAUSE": {
+            "total": 3,
+            "correct": 0
+          },
+          "STOP": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIMER": {
+            "total": 3,
+            "correct": 0
+          },
+          "ALARM": {
+            "total": 3,
+            "correct": 0
+          },
+          "CREATE_REMINDER": {
+            "total": 3,
+            "correct": 0
+          },
+          "CALL": {
+            "total": 3,
+            "correct": 0
+          },
+          "TIME": {
+            "total": 3,
+            "correct": 1
+          },
+          "WEATHER": {
+            "total": 3,
+            "correct": 0
+          },
+          "LIST_REMINDERS": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      },
+      "runtime_intent": {
+        "correct": 3,
+        "total": 48,
+        "accuracy": 0.0625,
+        "per_class": {
+          "turn_on_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "turn_off_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "dim_lights": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_temperature": {
+            "total": 3,
+            "correct": 0
+          },
+          "play_music": {
+            "total": 3,
+            "correct": 2
+          },
+          "pause_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_music": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "set_alarm": {
+            "total": 3,
+            "correct": 0
+          },
+          "stop_timer": {
+            "total": 3,
+            "correct": 0
+          },
+          "remind": {
+            "total": 3,
+            "correct": 0
+          },
+          "call": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_time": {
+            "total": 3,
+            "correct": 1
+          },
+          "what_weather": {
+            "total": 3,
+            "correct": 0
+          },
+          "what_reminders": {
+            "total": 3,
+            "correct": 0
+          },
+          "oov": {
+            "total": 3,
+            "correct": 0
+          }
+        }
+      }
+    }
+  }
+}
