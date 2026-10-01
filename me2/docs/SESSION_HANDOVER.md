@@ -98,8 +98,10 @@ The Pi v6 demo aliases are defined in `rpi5/bash_aliases.sh` and sourced from
 - `pi5-v6-vcm-only` - direct microphone mode without wakeword detection.
 
 All three load `models/onnx/v6_15m/model_int8.onnx` with its contract, enable
-reviewed v6 media actions, and enable live music playback. Other v6 labels are
-rejected. Source the alias file in an existing shell with
+reviewed media and volume actions, and enable live playback. Volume thresholds
+start at UP=0.90 and DOWN=0.60; these are initial tuning values, not calibrated
+against recorded volume commands. Other v6 labels are rejected. Source the
+alias file in an existing shell with
 `source ~/MyProjects/ee298-mlops/me2/rpi5/bash_aliases.sh`.
 
 ## Validation Completed

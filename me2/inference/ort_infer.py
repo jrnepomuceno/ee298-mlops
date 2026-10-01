@@ -94,6 +94,33 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     return e / np.sum(e)
 
 
+def _select_intent(probs: np.ndarray, intents: list[str],
+                   thresholds: dict[str, float] | None
+                   ) -> tuple[str, float, str | None]:
+    top_id = int(np.argmax(probs))
+    raw_intent = intents[top_id]
+    if not thresholds or raw_intent.lower() not in {"volume_up", "volume_down"}:
+        return raw_intent, float(probs[top_id]), None
+
+    candidates = []
+    for index, label in enumerate(intents):
+        key = label.lower()
+        if key not in {"volume_up", "volume_down"}:
+            continue
+        threshold = thresholds.get(key, 0.75)
+        confidence = float(probs[index])
+        if confidence >= threshold:
+            candidates.append((confidence - threshold, index, confidence))
+
+    if not candidates:
+        return "oov", float(probs[top_id]), raw_intent
+
+    _, selected_id, confidence = max(candidates)
+    selected_intent = intents[selected_id]
+    adjusted_from = raw_intent if selected_intent != raw_intent else None
+    return selected_intent, confidence, adjusted_from
+
+
 def ctc_greedy_decode(ctc_logits: np.ndarray,
                       vocab: list[str] | None = None) -> list[str]:
     """Greedy CTC decode of one utterance: (T, V) -> list of tokens.
@@ -129,7 +156,8 @@ def _trim_frames(mel: np.ndarray, max_frames: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 def run_utterance(session, wav: np.ndarray, max_frames: int | None,
                   intents: list, ctc_vocab: list,
-                  diagnostic_contract: dict | None = None) -> dict:
+                  diagnostic_contract: dict | None = None,
+                  intent_thresholds: dict[str, float] | None = None) -> dict:
     """wav: (samples,) float32 @16 kHz -> result dict.
 
     Returns the SAME dict shape as ``inference.infer.run_utterance`` so the
@@ -163,8 +191,8 @@ def run_utterance(session, wav: np.ndarray, max_frames: int | None,
             raise ValueError(
                 "intent-only ONNX output dimension does not match its labels")
         probs = _softmax(intent_logits[0])
-        top_id = int(np.argmax(probs))
-        intent = intents[top_id]
+        intent, intent_confidence, adjusted_from = _select_intent(
+            probs, intents, intent_thresholds)
         owners = diagnostic_contract.get("slot_owners", {})
         slot_values = diagnostic_contract.get("slot_values", {})
         slots = {}
@@ -182,49 +210,59 @@ def run_utterance(session, wav: np.ndarray, max_frames: int | None,
                 "value": values[slot_index],
                 "confidence": round(float(slot_probs[slot_index]), 4),
             }
-        return {
+        result = {
             "intent": intent,
-            "intent_confidence": round(float(probs[top_id]), 4),
+            "intent_confidence": round(intent_confidence, 4),
             "transcript": "",
             "slots": slots,
             "frames": int(mel.shape[0]),
             "latency_ms": round(latency_ms, 2),
             "backend": "intent_bounded_numeric_slots",
         }
+        if adjusted_from is not None:
+            result["pre_threshold_intent"] = adjusted_from
+        return result
     if len(outputs) == 1:
         intent_logits = outputs[0]
         if intent_logits.ndim != 2 or intent_logits.shape[-1] != len(intents):
             raise ValueError(
                 "intent-only ONNX output dimension does not match its labels")
         probs = _softmax(intent_logits[0])
-        top_id = int(np.argmax(probs))
-        return {
-            "intent": intents[top_id],
-            "intent_confidence": round(float(probs[top_id]), 4),
+        intent, intent_confidence, adjusted_from = _select_intent(
+            probs, intents, intent_thresholds)
+        result = {
+            "intent": intent,
+            "intent_confidence": round(intent_confidence, 4),
             "transcript": "",
             "slots": {},
             "frames": int(mel.shape[0]),
             "latency_ms": round(latency_ms, 2),
             "backend": "intent_only",
         }
+        if adjusted_from is not None:
+            result["pre_threshold_intent"] = adjusted_from
+        return result
     if len(outputs) != 2:
         raise ValueError(f"unsupported ONNX output count: {len(outputs)}")
 
     intent_logits, ctc_logits = outputs
     probs = _softmax(intent_logits[0])
-    top_id = int(np.argmax(probs))
-    intent = intents[top_id]
+    intent, intent_confidence, adjusted_from = _select_intent(
+        probs, intents, intent_thresholds)
     tokens = ctc_greedy_decode(ctc_logits[0], ctc_vocab)
     transcript = " ".join(tokens)
     slots = parse_slots(intent, transcript)
-    return {
+    result = {
         "intent": intent,
-        "intent_confidence": round(float(probs[top_id]), 4),
+        "intent_confidence": round(intent_confidence, 4),
         "transcript": transcript,
         "slots": slots,
         "frames": int(mel.shape[0]),
         "latency_ms": round(latency_ms, 2),
     }
+    if adjusted_from is not None:
+        result["pre_threshold_intent"] = adjusted_from
+    return result
 
 
 def self_test_wavs():

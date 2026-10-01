@@ -95,6 +95,23 @@ class MockIntentTests(unittest.TestCase):
         self.assertFalse(outcome.handled)
         self.assertEqual(outcome.reject.reason, "low_confidence")
 
+    def test_volume_intents_use_independent_confidence_thresholds(self) -> None:
+        pipeline = FacadePipeline(
+            threshold=0.75,
+            intent_thresholds={"volume_up": 0.90, "volume_down": 0.60},
+            dry_run=True,
+        )
+        down = pipeline.process({
+            "intent": "volume_down", "intent_confidence": 0.65, "slots": {},
+        }, source="threshold-test")
+        up = pipeline.process({
+            "intent": "volume_up", "intent_confidence": 0.85, "slots": {},
+        }, source="threshold-test")
+
+        self.assertTrue(down.handled)
+        self.assertFalse(up.handled)
+        self.assertEqual(up.reject.reason, "low_confidence")
+
     def test_invalid_mock_intent_fails_clearly(self) -> None:
         with self.assertRaisesRegex(ValueError, "no mock scenario"):
             self.inference.recognize("not_an_intent")

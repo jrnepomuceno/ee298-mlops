@@ -24,14 +24,17 @@ V6_TO_RUNTIME_INTENT = {
     "CREATE_REMINDER": "remind",
 }
 
-V6_ACTION_LABELS = frozenset({"PLAY_MUSIC", "PAUSE", "STOP"})
+V6_ACTION_LABELS = frozenset({
+    "PLAY_MUSIC", "PAUSE", "STOP", "VOLUME_UP", "VOLUME_DOWN",
+})
 
 
 def adapt_v6_result(result: dict[str, Any], contract: dict[str, Any],
                     slot_threshold: float = 0.75) -> dict[str, Any]:
     """Translate a v6 prediction for the facade; unknown classes reject safely."""
-    model_intent = str(result.get("intent", ""))
-    runtime_intent = V6_TO_RUNTIME_INTENT.get(model_intent)
+    selected_model_intent = str(result.get("intent", ""))
+    model_intent = str(result.get("pre_threshold_intent", selected_model_intent))
+    runtime_intent = V6_TO_RUNTIME_INTENT.get(selected_model_intent)
     slots: dict[str, Any] = {}
     raw_slots = result.get("slots") or {}
 
@@ -75,16 +78,18 @@ def adapt_v6_result(result: dict[str, Any], contract: dict[str, Any],
     adapted = {**result}
     adapted["model_intent"] = model_intent
     adapted["model_slots"] = raw_slots
-    adapted["intent"] = runtime_intent or "oov"
+    adapted["intent"] = ("oov" if selected_model_intent == "oov"
+                         else runtime_intent or "oov")
     adapted["slots"] = slots
     return adapted
 
 
 def adapt_v6_action_result(result: dict[str, Any], contract: dict[str, Any],
                            slot_threshold: float = 0.75) -> dict[str, Any]:
-    """Expose only reviewed music labels to action execution."""
+    """Expose only reviewed media and volume labels to action execution."""
     adapted = adapt_v6_result(result, contract, slot_threshold)
-    if result.get("intent") not in V6_ACTION_LABELS:
+    if (result.get("intent") not in V6_ACTION_LABELS
+            or adapted["intent"] == "oov"):
         adapted["intent"] = "oov"
         adapted["slots"] = {}
     return adapted

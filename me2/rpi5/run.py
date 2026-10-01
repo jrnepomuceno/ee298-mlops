@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     model.add_argument("--intent-labels", default=None,
                        help="load an intent/slot contract JSON; diagnostic-only unless --enable-v6-actions is set")
     model.add_argument("--enable-v6-actions", action="store_true",
-                       help="enable reviewed v6 music actions (PLAY_MUSIC, NEXT, PAUSE, STOP)")
+                       help="enable reviewed v6 media and volume actions")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")
@@ -121,6 +121,12 @@ def parse_args() -> argparse.Namespace:
                        help="maximum mel frames per utterance (default: 400)")
     model.add_argument("--min-confidence", type=float, default=0.75,
                        help="minimum intent confidence (default: 0.75)")
+    model.add_argument("--volume-up-threshold", type=float, default=None,
+                       metavar="P",
+                       help="volume_up threshold (default: --min-confidence)")
+    model.add_argument("--volume-down-threshold", type=float, default=None,
+                       metavar="P",
+                       help="volume_down threshold (default: --min-confidence)")
 
     audio = parser.add_argument_group("audio")
     audio.add_argument("--no-ack", action="store_true",
@@ -266,6 +272,21 @@ def print_microphone_intro(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parse_args()
+    volume_threshold_values = (args.volume_up_threshold,
+                               args.volume_down_threshold)
+    if any(value is not None and not 0.0 <= value <= 1.0
+           for value in volume_threshold_values):
+        raise SystemExit("volume intent thresholds must be between 0 and 1")
+    intent_thresholds: dict[str, float] = {}
+    if any(value is not None for value in volume_threshold_values):
+        intent_thresholds = {
+            "volume_up": (args.volume_up_threshold
+                          if args.volume_up_threshold is not None
+                          else args.min_confidence),
+            "volume_down": (args.volume_down_threshold
+                            if args.volume_down_threshold is not None
+                            else args.min_confidence),
+        }
     if args.intent_labels and not args.enable_v6_actions \
             and not (args.input or args.self_test):
         raise SystemExit("--intent-labels is diagnostics-only without --enable-v6-actions")
@@ -465,6 +486,7 @@ def main() -> int:
         if volume_controller is not None:
             volume_controller.begin()  # snapshot pre-demo level for restore
         pipeline = FacadePipeline(threshold=args.min_confidence,
+                      intent_thresholds=intent_thresholds,
                                   # Live mode: persist reminders and schedule
                                   # timers for real. (Was dry_run=True, which
                                   # made remind/timer confirm but never act.)
@@ -484,6 +506,7 @@ def main() -> int:
             checkpoint=args.checkpoint,
             intent_labels_path=args.intent_labels,
             enable_v6_actions=args.enable_v6_actions,
+            intent_thresholds=intent_thresholds,
             device=args.device,
             max_frames=args.max_frames,
             min_confidence=args.min_confidence,

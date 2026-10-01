@@ -34,6 +34,14 @@ class _Session:
         return [np.asarray([[0.1, 2.0, 0.2]], dtype=np.float32)]
 
 
+class _ScoreSession(_Session):
+    def __init__(self, logits):
+        self.logits = logits
+
+    def run(self, _names, _inputs):
+        return [np.asarray([self.logits], dtype=np.float32)]
+
+
 class IntentOnlyInferenceTests(unittest.TestCase):
     def test_single_output_returns_raw_label_without_slots(self):
         with mock.patch("inference.ort_infer.kaldi_fbank",
@@ -46,6 +54,46 @@ class IntentOnlyInferenceTests(unittest.TestCase):
         self.assertEqual(result["slots"], {})
         self.assertEqual(result["transcript"], "")
         self.assertEqual(result["backend"], "intent_only")
+
+    def test_volume_thresholds_can_select_down_over_raw_up_winner(self):
+        with mock.patch("inference.ort_infer.kaldi_fbank",
+                        return_value=np.zeros((4, 80), dtype=np.float32)):
+            result = run_utterance(
+                _ScoreSession([2.0, 1.0, 0.0]),
+                np.zeros(1600, dtype=np.float32), 400,
+                ["volume_up", "volume_down", "oov"], [],
+                intent_thresholds={"volume_up": 0.80, "volume_down": 0.20},
+            )
+
+        self.assertEqual(result["intent"], "volume_down")
+        self.assertEqual(result["pre_threshold_intent"], "volume_up")
+        self.assertAlmostEqual(result["intent_confidence"], 0.2447, places=3)
+
+    def test_volume_thresholds_accept_uppercase_v6_labels(self):
+        with mock.patch("inference.ort_infer.kaldi_fbank",
+                        return_value=np.zeros((4, 80), dtype=np.float32)):
+            result = run_utterance(
+                _ScoreSession([2.0, 1.0, 0.0]),
+                np.zeros(1600, dtype=np.float32), 400,
+                ["VOLUME_UP", "VOLUME_DOWN", "OOV"], [],
+                intent_thresholds={"volume_up": 0.80, "volume_down": 0.20},
+            )
+
+        self.assertEqual(result["intent"], "VOLUME_DOWN")
+        self.assertEqual(result["pre_threshold_intent"], "VOLUME_UP")
+
+    def test_volume_thresholds_reject_pair_when_neither_clears_cutoff(self):
+        with mock.patch("inference.ort_infer.kaldi_fbank",
+                        return_value=np.zeros((4, 80), dtype=np.float32)):
+            result = run_utterance(
+                _ScoreSession([2.0, 1.0, 0.0]),
+                np.zeros(1600, dtype=np.float32), 400,
+                ["volume_up", "volume_down", "oov"], [],
+                intent_thresholds={"volume_up": 0.80, "volume_down": 0.30},
+            )
+
+        self.assertEqual(result["intent"], "oov")
+        self.assertEqual(result["pre_threshold_intent"], "volume_up")
 
     def test_bounded_slot_diagnostic_decodes_owned_slot_values(self):
         class SlotSession:

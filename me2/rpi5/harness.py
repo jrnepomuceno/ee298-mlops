@@ -71,6 +71,7 @@ class HarnessConfig:
     min_confidence: float = 0.75
     warmup: int = 1
     threads: int = 2
+    intent_thresholds: dict[str, float] | None = None
 
 
 class DryRunDispatcher:
@@ -136,6 +137,7 @@ class FacadePipeline:
 
     def __init__(self, orchestrator: Orchestrator | None = None,
                  *, threshold: float = 0.75, dry_run: bool = True,
+                 intent_thresholds: dict[str, float] | None = None,
                  weather_fn: "Callable[[], str] | None" = None,
                  timer_manager: Any | None = None,
                  timer_alarm: Any | None = None,
@@ -156,14 +158,16 @@ class FacadePipeline:
             light_driver=light_driver,
             dialer=dialer)
         self.threshold = threshold
+        self.intent_thresholds = intent_thresholds or {}
         self.dry_run = dry_run
 
     def process(self, result: dict[str, Any], source: str = "microphone") -> OrchestratorResult:
         intent = result.get("intent", "oov")
         confidence = float(result.get("intent_confidence", 0.0))
         slots = result.get("slots") or {}
+        threshold = self.intent_thresholds.get(intent, self.threshold)
         decoded = decode(intent, slots, confidence,
-                         threshold=self.threshold, dry_run=self.dry_run)
+                 threshold=threshold, dry_run=self.dry_run)
         return self.orchestrator.run(decoded, source=source)
 
 
@@ -175,6 +179,7 @@ class PiHarness:
                  pipeline: FacadePipeline | None = None) -> None:
         self.config = config
         self.device = "cpu"  # ONNX Runtime CPU execution provider
+        self.intent_thresholds = config.intent_thresholds or {}
         if config.enable_v6_actions and not config.intent_labels_path:
             raise ValueError("v6 actions require --intent-labels contract JSON")
         checkpoint = resolve_checkpoint(config.checkpoint)
@@ -262,6 +267,7 @@ class PiHarness:
             self.intents,
             self.ctc_vocab,
             diagnostic_contract=self.diagnostic_contract,
+            intent_thresholds=self.intent_thresholds,
         )
         return self._event(source, result)
 
@@ -272,7 +278,8 @@ class PiHarness:
         wav = np.asarray(wav, dtype=np.float32).ravel()
         result = run_utterance(self.session, wav, self.max_frames,
                                self.intents, self.ctc_vocab,
-                               diagnostic_contract=self.diagnostic_contract)
+                               diagnostic_contract=self.diagnostic_contract,
+                               intent_thresholds=self.intent_thresholds)
         if self.v6_actions_enabled:
             result = adapt_v6_action_result(
                 result, self.diagnostic_contract or {},
@@ -289,6 +296,7 @@ class PiHarness:
                 self.intents,
                 self.ctc_vocab,
                 diagnostic_contract=self.diagnostic_contract,
+                intent_thresholds=self.intent_thresholds,
             )
             events.append(self._event(name, result))
         return events
@@ -298,7 +306,12 @@ class PiHarness:
             result = adapt_v6_action_result(
                 result, self.diagnostic_contract or {},
                 self.config.v6_slot_threshold)
-        result = {**result, "min_confidence": self.config.min_confidence}
+        intent = result.get("intent")
+        if not isinstance(intent, str):
+            intent = "oov"
+        min_confidence = self.intent_thresholds.get(
+            intent, self.config.min_confidence)
+        result = {**result, "min_confidence": min_confidence}
         if self.diagnostic_only:
             action = {
                 "status": "diagnostic_only",

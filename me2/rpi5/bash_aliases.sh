@@ -15,6 +15,7 @@ _pi5_v6_demo() {
         --checkpoint models/onnx/v6_15m/model_int8.onnx \
         --intent-labels models/onnx/v6_15m/contract.json \
         --enable-v6-actions --live-media --device cpu \
+        --volume-up-threshold 0.90 --volume-down-threshold 0.60 \
         --audio-player pw-play --audio-device WILLEN \
         --reply-dir "$repo/assets/replies" \
         --ack-wav "$repo/assets/replies/ack_beep.wav" \

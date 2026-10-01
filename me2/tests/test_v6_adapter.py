@@ -37,6 +37,22 @@ class V6AdapterTests(unittest.TestCase):
         self.assertEqual(timer_result["intent"], "oov")
         self.assertEqual(timer_result["slots"], {})
 
+    def test_action_mode_allows_volume_labels(self):
+        self.assertEqual(
+            adapt_v6_action_result(self._result("VOLUME_UP"), {})["intent"],
+            "volume_up",
+        )
+        self.assertEqual(
+            adapt_v6_action_result(self._result("VOLUME_DOWN"), {})["intent"],
+            "volume_down",
+        )
+
+        adjusted = self._result("VOLUME_DOWN")
+        adjusted["pre_threshold_intent"] = "VOLUME_UP"
+        result = adapt_v6_action_result(adjusted, {})
+        self.assertEqual(result["intent"], "volume_down")
+        self.assertEqual(result["model_intent"], "VOLUME_UP")
+
     def test_unmapped_message_rejects_instead_of_dispatching(self):
         result = adapt_v6_result(self._result("MESSAGE"), {})
         self.assertEqual(result["intent"], "oov")
