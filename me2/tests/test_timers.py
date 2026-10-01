@@ -121,6 +121,30 @@ class TimerUnitCorrectnessTests(unittest.TestCase):
         self.assertEqual(mgr.set_calls[-1], (4, "minute"))
         self.assertEqual(mgr.last.interval, 240.0)
 
+    def test_timer_announcement_completes_before_scheduling(self):
+        events = []
+
+        class OrderedManager(RecordingManager):
+            def set_timer(self, duration, unit="minute"):
+                events.append("timer scheduled")
+                return super().set_timer(duration, unit)
+
+        def announce(text):
+            events.append(text)
+            return True
+
+        manager = OrderedManager()
+        executor = TimerExecutor(dry_run=False, manager=manager,
+                                 before_start=announce)
+        result = executor.run(decode(
+            "set_timer", {"duration": 2, "duration_unit": "minute"}, 0.99,
+            dry_run=False))
+
+        self.assertEqual(events, [
+            "Setting timer for 2 minutes. Starting now.", "timer scheduled",
+        ])
+        self.assertTrue(result.payload["announced_before_start"])
+
 
 class TimerReplySourceTests(unittest.TestCase):
     """The executor's payload['answer'] is the single source of truth."""

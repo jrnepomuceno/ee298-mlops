@@ -30,8 +30,10 @@ class RgbController:
     applied, preventing multiple USB controllers from competing.
     """
 
-    def __init__(self, executable: str | None = None) -> None:
+    def __init__(self, executable: str | None = None,
+                 light_driver: LightDriver | None = None) -> None:
         self.executable = executable
+        self.light_driver = light_driver
         self._cycle: subprocess.Popen[Any] | None = None
         self._timer_alert = False
 
@@ -43,6 +45,9 @@ class RgbController:
         return self.idle()
 
     def idle(self) -> dict[str, Any]:
+        if self.light_driver is not None and getattr(self.light_driver, "is_on", False):
+            color = getattr(self.light_driver, "current_color", "FFF4E6")
+            return self.solid(color, "idle")
         return self.solid("0", "idle")
 
     def wake(self) -> dict[str, Any]:
@@ -108,6 +113,10 @@ class RgbController:
 
     def close(self) -> None:
         self._timer_alert = False
+        if self.light_driver is not None and getattr(self.light_driver, "is_on", False):
+            color = getattr(self.light_driver, "current_color", "FFF4E6")
+            self.solid(color, "idle")
+            return
         self.idle()
 
     def _run(self, mode: str, value: str, state: str) -> dict[str, Any]:
@@ -210,6 +219,17 @@ class HyperxDuoCastDriver(LightDriver):
     def __init__(self, executable: str | None = None) -> None:
         self.executable = executable or os.environ.get("QUADCASTRGB") or "quadcastrgb"
         self._brightness = self.DEFAULT_BRIGHTNESS
+        self._is_on = False
+
+    @property
+    def is_on(self) -> bool:
+        return self._is_on
+
+    @property
+    def current_color(self) -> str:
+        if not self._is_on:
+            return "0"
+        return self._scale_color(self.LIT_COLOR, self._brightness)
 
     def available(self) -> bool:
         if self.executable.startswith("/"):
@@ -217,14 +237,17 @@ class HyperxDuoCastDriver(LightDriver):
         return shutil.which(self.executable) is not None
 
     def on(self) -> None:
+        self._is_on = True
         self.set_brightness(self._brightness)
 
     def off(self) -> None:
+        self._is_on = False
         self._solid("0")
 
     def set_brightness(self, percent: int) -> int:
         percent = max(1, min(100, int(percent)))
         self._brightness = percent
+        self._is_on = True
         self._solid(self._scale_color(self.LIT_COLOR, percent))
         return percent
 

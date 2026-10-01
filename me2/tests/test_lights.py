@@ -124,6 +124,28 @@ class TestHyperxDuoCastDriver(unittest.TestCase):
         self.drv.close()
         self.assertEqual(self.fake.calls[-1][2], "0")
 
+    def test_driver_tracks_is_on_and_current_color(self):
+        self.assertFalse(self.drv.is_on)
+        self.assertEqual(self.drv.current_color, "0")
+        self.drv.on()
+        self.assertTrue(self.drv.is_on)
+        self.assertEqual(self.drv.current_color, "FFF4E6")
+        self.drv.set_brightness(50)
+        self.assertTrue(self.drv.is_on)
+        self.assertEqual(self.drv.current_color, "807A73")
+        self.drv.off()
+        self.assertFalse(self.drv.is_on)
+        self.assertEqual(self.drv.current_color, "0")
+
+    def test_rgb_controller_idle_preserves_active_light(self):
+        rgb = RgbController(executable="/opt/bin/quadcastrgb", light_driver=self.drv)
+        self.drv.set_brightness(50)
+        self.assertEqual(rgb.idle()["state"], "idle")
+        self.assertEqual(self.fake.calls[-1][1:], ["solid", "807A73"])
+        self.drv.off()
+        self.assertEqual(rgb.idle()["state"], "idle")
+        self.assertEqual(self.fake.calls[-1][1:], ["solid", "0"])
+
 
 class TestRgbTimerAlert(unittest.TestCase):
     def setUp(self):

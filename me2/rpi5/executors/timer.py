@@ -1,6 +1,8 @@
 """Timers & alarms. Live path: the local TimerManager (already in the harness)."""
 from __future__ import annotations
 
+from typing import Callable
+
 from ..facade import ActionRequest
 from ..timer import SECONDS_PER_UNIT
 from .base import ExecutionResult, Executor
@@ -34,10 +36,12 @@ class TimerExecutor(Executor):
     category = "timer"
 
     def __init__(self, dry_run: bool = True, manager: object | None = None,
-                 alarm: object | None = None) -> None:
+                 alarm: object | None = None,
+                 before_start: Callable[[str], bool] | None = None) -> None:
         super().__init__(dry_run)
         self.manager = manager
         self.alarm = alarm
+        self.before_start = before_start
 
     def _live(self, req: ActionRequest) -> ExecutionResult:
         mgr = self.manager
@@ -61,12 +65,19 @@ class TimerExecutor(Executor):
                                            side_effects=False)
                 if self.alarm is not None:
                     self.alarm.stop()
+                spoken = _spoken_set(duration, unit)
+                announced = False
+                if self.before_start is not None:
+                    announced = bool(self.before_start(spoken))
                 mgr.set_timer(duration, unit)
+                payload = {"answer": spoken}
+                if announced:
+                    payload["announced_before_start"] = True
                 return ExecutionResult(ok=True, intent=req.intent, category=self.category,
                                        action_code=req.action_code,
                                        detail=f"timer live: {req.action_code}",
                                        side_effects=True,
-                                       payload={"answer": _spoken_set(duration, unit)})
+                                       payload=payload)
             elif req.action_code == "alarm.set":
                 # Wall-clock alarm: schedule on the manager and confirm the
                 # canonical time back to the user.

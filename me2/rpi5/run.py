@@ -268,11 +268,13 @@ def main() -> int:
         raise SystemExit("--intent-labels is diagnostics-only; use --input or --self-test (no microphone/actions)")
     configure_logging()
     sys.excepthook = log_uncaught_exception
-    rgb = RgbController(args.rgb_executable)
+    light_driver = make_light_driver(args.light_driver, args.light_executable)
+    rgb = RgbController(args.rgb_executable, light_driver=light_driver)
     wav_player: WavPlayer | None = None
     piper_tts: PiperTts | None = None
     tts_active = threading.Event()
     media_before_play = None
+    timer_before_start = None
     timer_alarm: TimerAlarm | None = None
     warmup_timer: threading.Timer | None = None
     def _on_timer_expire(state) -> None:
@@ -334,7 +336,6 @@ def main() -> int:
                           else VolumeController())
     media_player = (MediaPlayerController(args.music_dir, player=args.player)
                      if args.live_media else None)
-    light_driver = make_light_driver(args.light_driver, args.light_executable)
     if light_driver is not None:
         if light_driver.available():
             log(f"[lights] live driver '{light_driver.name}' ready")
@@ -392,6 +393,30 @@ def main() -> int:
 
             media_before_play = announce_music_track
 
+            def announce_timer_start(text: str) -> bool:
+                nonlocal post_reply_until
+                if piper_tts is None or wav_player is None:
+                    return False
+                with tempfile.NamedTemporaryFile(
+                        prefix="pi5-vcm-timer-start-", suffix=".wav", delete=False) as tmp:
+                    tmp_path = tmp.name
+                tts_active.set()
+                try:
+                    piper_tts.synthesize(text, tmp_path)
+                    wav_player.play(tmp_path)
+                    time.sleep(0.3)
+                    if post_reply_guard_s > 0:
+                        post_reply_until = time.monotonic() + post_reply_guard_s
+                    return True
+                except Exception as exc:  # noqa: BLE001
+                    log(f"[timer] pre-start announcement failed: {exc}", error=True)
+                    return False
+                finally:
+                    tts_active.clear()
+                    os.unlink(tmp_path)
+
+            timer_before_start = announce_timer_start
+
             def play_timer_ring() -> None:
                 if wav_player is None:
                     return
@@ -443,6 +468,7 @@ def main() -> int:
                                   weather_fn=weather_fn,
                                   timer_manager=timer_manager,
                                   timer_alarm=timer_alarm,
+                                  timer_before_start=timer_before_start,
                                   reminder_store=reminder_store,
                                   volume_controller=volume_controller,
                                   media_player=media_player,
@@ -623,6 +649,15 @@ def main() -> int:
                 payload = getattr(execution, "payload", {}) or {}
                 if (result.get("intent") == "play_music"
                         and payload.get("announced_before_play")):
+                    current_event["tts"] = {
+                        "played": True,
+                        "source": "piper",
+                        "text": getattr(action, "reply_text", ""),
+                    }
+                    return
+
+                if (result.get("intent") == "set_timer"
+                        and payload.get("announced_before_start")):
                     current_event["tts"] = {
                         "played": True,
                         "source": "piper",

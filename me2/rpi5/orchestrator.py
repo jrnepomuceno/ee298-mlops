@@ -115,7 +115,9 @@ class Orchestrator:
                 reply = str(answer) if answer else req.reply_text
             else:
                 reply = "Sorry, that didn't work."
-        already_spoken = bool((err.payload or {}).get("announced_before_play"))
+        payload = err.payload or {}
+        already_spoken = bool(payload.get("announced_before_play")
+                      or payload.get("announced_before_start"))
         if not already_spoken:
             self._speak(reply)
         self._rgb("speaking", "idle")
@@ -157,6 +159,7 @@ def default_orchestrator(*, rgb: Any | None = None,
                          weather_fn: Callable[[], str] | None = None,
                          timer_manager: Any | None = None,
                          timer_alarm: Any | None = None,
+                         timer_before_start: Callable[[str], bool] | None = None,
                          reminder_store: Any | None = None,
                          volume_controller: Any | None = None,
                          media_player: Any | None = None,
@@ -196,7 +199,8 @@ def default_orchestrator(*, rgb: Any | None = None,
                               media_volume=media_volume,
                               before_play=media_before_play),
         "timer": TimerExecutor(dry_run, manager=timer_manager,
-                               alarm=timer_alarm),
+                               alarm=timer_alarm,
+                               before_start=timer_before_start),
         "remind": ReminderExecutor(dry_run, store=reminder_store),
         "comms": CommsExecutor(dry_run, dialer=dialer),
         "info": InfoExecutor(dry_run, weather_fn=weather_fn,

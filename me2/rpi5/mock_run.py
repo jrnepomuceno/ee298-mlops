@@ -179,7 +179,7 @@ def main() -> int:
         if light_driver is None or not light_driver.available():
             raise SystemExit("selected light driver is unavailable")
 
-    rgb_controller = (RgbController(args.rgb_executable)
+    rgb_controller = (RgbController(args.rgb_executable, light_driver=light_driver)
                       if args.live_rgb else None)
     timer_rgb_report = ({"alert_started": None, "alert_stopped": None}
                         if rgb_controller is not None else None)
@@ -309,6 +309,19 @@ def main() -> int:
 
         timer_manager = TimerManager(on_expire=on_timer_expire)
 
+    timer_before_start = None
+    if args.live_timer and player is not None:
+        def announce_timer_start(text: str) -> bool:
+            try:
+                speak(text)
+                return True
+            except Exception as exc:  # noqa: BLE001 - keep timer setup fail-soft
+                print(f"[mock] timer announcement failed: {exc}",
+                      file=sys.stderr, flush=True)
+                return False
+
+        timer_before_start = announce_timer_start
+
     orchestrator = default_orchestrator(
         dry_run=not (args.live_lights or args.live_volume or args.live_timer or
                      args.live_weather or args.live_call),
@@ -319,6 +332,7 @@ def main() -> int:
         volume_controller=volume_controller,
         timer_manager=timer_manager,
         timer_alarm=timer_alarm,
+        timer_before_start=timer_before_start,
         weather_fn=(make_weather_fn(args.weather_location)
                     if args.live_weather else None),
         dialer=dialer,
@@ -415,7 +429,8 @@ def main() -> int:
         }, indent=2, default=str))
     finally:
         if light_driver is not None:
-            light_driver.close()
+            if args.intent not in {"turn_on_lights", "dim_lights"}:
+                light_driver.close()
         if dialer is not None:
             dialer.close()
         if player is not None:
