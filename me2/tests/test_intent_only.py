@@ -99,6 +99,17 @@ class IntentOnlyInferenceTests(unittest.TestCase):
         self.assertEqual(result["intent"], "oov")
         self.assertEqual(result["pre_threshold_intent"], "volume_up")
 
+    def test_default_volume_thresholds_keep_down_at_060(self):
+        with mock.patch("inference.ort_infer.kaldi_fbank",
+                        return_value=np.zeros((4, 80), dtype=np.float32)):
+            result = run_utterance(
+                _ScoreSession([0.0, 2.0, 0.0]),
+                np.zeros(1600, dtype=np.float32), 400,
+                ["volume_up", "volume_down", "oov"], [],
+            )
+
+        self.assertEqual(result["intent"], "volume_down")
+
     def test_bounded_slot_diagnostic_decodes_owned_slot_values(self):
         class SlotSession:
             def get_inputs(self):

@@ -41,6 +41,13 @@ INTENT_TO_ID = {name: i for i, name in enumerate(INTENTS)}
 NUM_INTENTS = len(INTENTS)
 OOV_INTENT = "oov"
 
+# Runtime intent gates; volume keeps asymmetric cutoffs to avoid UP bias.
+DEFAULT_INTENT_CONFIDENCE_THRESHOLD = 0.70
+DEFAULT_VOLUME_INTENT_THRESHOLDS = {
+    "volume_up": 0.90,
+    "volume_down": 0.60,
+}
+
 # ------------------------------------------------------------- CTC vocab --
 # The slot head is a CTC decoder over a *constrained* vocabulary: digits,
 # clock words, and a small set of slot words (contacts, reminder keywords).

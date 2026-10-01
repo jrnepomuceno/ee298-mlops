@@ -9,6 +9,7 @@ from rpi5.harness import FacadePipeline
 from rpi5.mock_inference import MOCK_SLOTS, MockInference
 from rpi5.mock_run import main as mock_run_main
 from rpi5.orchestrator import default_orchestrator
+from rpi5.run import parse_args
 
 
 class RecordingRgb:
@@ -41,6 +42,15 @@ class MockIntentTests(unittest.TestCase):
             dry_run=True,
         )
         self.inference = MockInference()
+
+    def test_runtime_threshold_defaults(self) -> None:
+        with mock.patch("sys.argv", ["rpi5.run", "--self-test"]):
+            args = parse_args()
+
+        self.assertEqual(args.min_confidence, 0.70)
+        self.assertEqual(args.volume_up_threshold, 0.90)
+        self.assertEqual(args.volume_down_threshold, 0.60)
+        self.assertEqual(args.wakeword_threshold, 0.75)
 
     def test_catalog_covers_every_facade_intent(self) -> None:
         self.assertEqual(set(MOCK_SLOTS) - {"oov"}, set(INTENT_SPECS))
@@ -101,6 +111,19 @@ class MockIntentTests(unittest.TestCase):
             intent_thresholds={"volume_up": 0.90, "volume_down": 0.60},
             dry_run=True,
         )
+        down = pipeline.process({
+            "intent": "volume_down", "intent_confidence": 0.65, "slots": {},
+        }, source="threshold-test")
+        up = pipeline.process({
+            "intent": "volume_up", "intent_confidence": 0.85, "slots": {},
+        }, source="threshold-test")
+
+        self.assertTrue(down.handled)
+        self.assertFalse(up.handled)
+        self.assertEqual(up.reject.reason, "low_confidence")
+
+    def test_volume_intents_keep_default_asymmetric_thresholds(self) -> None:
+        pipeline = FacadePipeline(dry_run=True)
         down = pipeline.process({
             "intent": "volume_down", "intent_confidence": 0.65, "slots": {},
         }, source="threshold-test")

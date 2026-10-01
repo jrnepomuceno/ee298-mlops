@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
+from config import DEFAULT_INTENT_CONFIDENCE_THRESHOLD
+
 
 # --------------------------------------------------------------------------- #
 # Result types
@@ -152,7 +154,7 @@ INTENT_SPECS: dict[str, dict[str, Any]] = {
 KNOWN_INTENTS: frozenset[str] = frozenset(INTENT_SPECS)
 
 #: Confidence floor. Below this the model is not trusted to act.
-DEFAULT_CONFIDENCE_THRESHOLD = 0.75
+DEFAULT_CONFIDENCE_THRESHOLD = DEFAULT_INTENT_CONFIDENCE_THRESHOLD
 
 #: Human-readable slot labels for error messages ("the percent slot").
 _SLOT_ARTICLE = {"percent": "the brightness", "temperature": "the temperature",

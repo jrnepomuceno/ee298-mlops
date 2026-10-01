@@ -23,6 +23,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 import numpy as np
+from config import DEFAULT_INTENT_CONFIDENCE_THRESHOLD, DEFAULT_VOLUME_INTENT_THRESHOLDS
 
 from inference.ort_infer import (
     load_session,
@@ -33,7 +34,8 @@ from inference.ort_infer import (
 )
 from inference.features import load_wav_mono
 from .replies import build_reply
-from .facade import ActionRequest, RejectResult, decode
+from .facade import (ActionRequest, DEFAULT_CONFIDENCE_THRESHOLD,
+                     RejectResult, decode)
 from .orchestrator import Orchestrator, OrchestratorResult, default_orchestrator
 from .v6_adapter import adapt_v6_action_result
 
@@ -68,7 +70,7 @@ class HarnessConfig:
     v6_slot_threshold: float = 0.75
     device: str = "cpu"
     max_frames: int = 400
-    min_confidence: float = 0.75
+    min_confidence: float = DEFAULT_INTENT_CONFIDENCE_THRESHOLD
     warmup: int = 1
     threads: int = 2
     intent_thresholds: dict[str, float] | None = None
@@ -136,7 +138,8 @@ class FacadePipeline:
     """
 
     def __init__(self, orchestrator: Orchestrator | None = None,
-                 *, threshold: float = 0.75, dry_run: bool = True,
+                 *, threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+                 dry_run: bool = True,
                  intent_thresholds: dict[str, float] | None = None,
                  weather_fn: "Callable[[], str] | None" = None,
                  timer_manager: Any | None = None,
@@ -158,7 +161,10 @@ class FacadePipeline:
             light_driver=light_driver,
             dialer=dialer)
         self.threshold = threshold
-        self.intent_thresholds = intent_thresholds or {}
+        self.intent_thresholds = {
+            **DEFAULT_VOLUME_INTENT_THRESHOLDS,
+            **(intent_thresholds or {}),
+        }
         self.dry_run = dry_run
 
     def process(self, result: dict[str, Any], source: str = "microphone") -> OrchestratorResult:
@@ -179,7 +185,10 @@ class PiHarness:
                  pipeline: FacadePipeline | None = None) -> None:
         self.config = config
         self.device = "cpu"  # ONNX Runtime CPU execution provider
-        self.intent_thresholds = config.intent_thresholds or {}
+        self.intent_thresholds = {
+            **DEFAULT_VOLUME_INTENT_THRESHOLDS,
+            **(config.intent_thresholds or {}),
+        }
         if config.enable_v6_actions and not config.intent_labels_path:
             raise ValueError("v6 actions require --intent-labels contract JSON")
         checkpoint = resolve_checkpoint(config.checkpoint)

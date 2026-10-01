@@ -108,15 +108,19 @@ def _select_intent(probs: np.ndarray, intents: list[str],
                    ) -> tuple[str, float, str | None]:
     top_id = int(np.argmax(probs))
     raw_intent = intents[top_id]
-    if not thresholds or raw_intent.lower() not in {"volume_up", "volume_down"}:
+    if raw_intent.lower() not in {"volume_up", "volume_down"}:
         return raw_intent, float(probs[top_id]), None
 
+    volume_thresholds = {
+        **config.DEFAULT_VOLUME_INTENT_THRESHOLDS,
+        **(thresholds or {}),
+    }
     candidates = []
     for index, label in enumerate(intents):
         key = label.lower()
         if key not in {"volume_up", "volume_down"}:
             continue
-        threshold = thresholds.get(key, 0.75)
+        threshold = volume_thresholds[key]
         confidence = float(probs[index])
         if confidence >= threshold:
             candidates.append((confidence - threshold, index, confidence))

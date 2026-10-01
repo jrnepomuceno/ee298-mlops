@@ -14,6 +14,9 @@ import time
 import warnings
 from pathlib import Path
 
+from config import (DEFAULT_INTENT_CONFIDENCE_THRESHOLD,
+                    DEFAULT_VOLUME_INTENT_THRESHOLDS)
+
 from .audio import VADConfig, microphone_utterances
 from .harness import ACTION_BY_INTENT, DryRunDispatcher, FacadePipeline, HarnessConfig, PiHarness, event_json
 from .replies import build_reply, reply_wav_name
@@ -111,7 +114,7 @@ def parse_args() -> argparse.Namespace:
     model.add_argument("--intent-labels", default=None,
                        help="load an intent/slot contract JSON; diagnostic-only unless --enable-v6-actions is set")
     model.add_argument("--enable-v6-actions", action="store_true",
-                       help="enable reviewed v6 media and volume actions")
+                       help="enable v6 actions supported by the project runtime")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")
@@ -119,14 +122,17 @@ def parse_args() -> argparse.Namespace:
                        help="ORT intra_op_num_threads (default: 2 for Pi5)")
     model.add_argument("--max-frames", type=int, default=400,
                        help="maximum mel frames per utterance (default: 400)")
-    model.add_argument("--min-confidence", type=float, default=0.75,
-                       help="minimum intent confidence (default: 0.75)")
-    model.add_argument("--volume-up-threshold", type=float, default=None,
+    model.add_argument("--min-confidence", type=float,
+                       default=DEFAULT_INTENT_CONFIDENCE_THRESHOLD,
+                       help="minimum intent confidence (default: 0.70)")
+    model.add_argument("--volume-up-threshold", type=float,
+                       default=DEFAULT_VOLUME_INTENT_THRESHOLDS["volume_up"],
                        metavar="P",
-                       help="volume_up threshold (default: --min-confidence)")
-    model.add_argument("--volume-down-threshold", type=float, default=None,
+                       help="volume_up threshold (default: 0.90)")
+    model.add_argument("--volume-down-threshold", type=float,
+                       default=DEFAULT_VOLUME_INTENT_THRESHOLDS["volume_down"],
                        metavar="P",
-                       help="volume_down threshold (default: --min-confidence)")
+                       help="volume_down threshold (default: 0.60)")
 
     audio = parser.add_argument_group("audio")
     audio.add_argument("--no-ack", action="store_true",
@@ -138,8 +144,8 @@ def parse_args() -> argparse.Namespace:
                             "re-latch the wake detector (default: 4.0)")
     audio.add_argument("--wakeword", metavar="NAME",
                        help="pretrained wake-word model, e.g. alexa")
-    audio.add_argument("--wakeword-threshold", type=float, default=0.7,
-                       help="wake-word score threshold (default: 0.7)")
+    audio.add_argument("--wakeword-threshold", type=float, default=0.75,
+                       help="wake-word score threshold (default: 0.75)")
     audio.add_argument("--rgb-executable", metavar="PATH",
                        help="QuadcastRGB executable for DuoCast LEDs")
     audio.add_argument("--audio-player", default="pw-play",
@@ -277,16 +283,10 @@ def main() -> int:
     if any(value is not None and not 0.0 <= value <= 1.0
            for value in volume_threshold_values):
         raise SystemExit("volume intent thresholds must be between 0 and 1")
-    intent_thresholds: dict[str, float] = {}
-    if any(value is not None for value in volume_threshold_values):
-        intent_thresholds = {
-            "volume_up": (args.volume_up_threshold
-                          if args.volume_up_threshold is not None
-                          else args.min_confidence),
-            "volume_down": (args.volume_down_threshold
-                            if args.volume_down_threshold is not None
-                            else args.min_confidence),
-        }
+    intent_thresholds: dict[str, float] = {
+        "volume_up": args.volume_up_threshold,
+        "volume_down": args.volume_down_threshold,
+    }
     if args.intent_labels and not args.enable_v6_actions \
             and not (args.input or args.self_test):
         raise SystemExit("--intent-labels is diagnostics-only without --enable-v6-actions")

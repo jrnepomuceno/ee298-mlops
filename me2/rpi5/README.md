@@ -46,6 +46,7 @@ allows the project-supported v6 intents: `TIME`, `WEATHER`, `LIST_REMINDERS`,
 `MESSAGE` has no runtime handler, and v6 has no separate `stop_timer` label.
 Volume thresholds are configurable with `--volume-up-threshold` and
 `--volume-down-threshold`; the Pi Bash demo starts at 0.90 and 0.60 respectively.
+Other intents use `--min-confidence`, which defaults to 0.70.
 When one volume label wins the raw softmax, a qualifying alternative may
 replace it; if neither clears its threshold, the volume pair is rejected.
 Result objects include `volume_intent_scores` with the raw UP/DOWN probabilities.

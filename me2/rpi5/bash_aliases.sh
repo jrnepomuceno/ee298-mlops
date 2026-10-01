@@ -20,7 +20,7 @@ _pi5_v6_demo() {
         --reply-dir "$repo/assets/replies" \
         --ack-wav "$repo/assets/replies/ack_beep.wav" \
         --rgb-executable "$HOME/.local/bin/quadcastrgb" \
-        --min-confidence 0.75
+        --min-confidence 0.70
 }
 
 alias pi5-v6-demo='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.75'

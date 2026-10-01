@@ -101,7 +101,8 @@ All three load `models/onnx/v6_15m/model_int8.onnx` with its contract, enable
 project-supported mapped actions and queries, and enable live playback. Volume thresholds
 start at UP=0.90 and DOWN=0.60; these are initial tuning values, not calibrated
 against recorded volume commands. Alexa wakeword threshold is 0.75 for the
-wake-enabled aliases. Other v6 labels are rejected. Source the
+wake-enabled aliases. Other intent confidence defaults to 0.70. Other v6 labels
+are rejected. Source the
 alias file in an existing shell with
 `source ~/MyProjects/ee298-mlops/me2/rpi5/bash_aliases.sh`.
 
