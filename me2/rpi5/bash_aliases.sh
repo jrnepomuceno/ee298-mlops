@@ -23,6 +23,6 @@ _pi5_v6_demo() {
         --min-confidence 0.75
 }
 
-alias pi5-v6-demo='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.7'
-alias pi5-v6-debug='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.7 --wakeword-log "$HOME/MyProjects/ee298-mlops/me2/logs/v6-demo-wake.log"'
+alias pi5-v6-demo='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.75'
+alias pi5-v6-debug='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.75 --wakeword-log "$HOME/MyProjects/ee298-mlops/me2/logs/v6-demo-wake.log"'
 alias pi5-v6-vcm-only='_pi5_v6_demo --vcm-only'
