@@ -90,12 +90,17 @@ cd ~/MyProjects/pi5-vcm
   --rgb-executable ~/.local/bin/quadcastrgb
 ```
 
-Aliases in the Pi `~/.zshrc`:
+The Pi v6 demo aliases are defined in `rpi5/bash_aliases.sh` and sourced from
+`~/.bashrc`. They are separate from the legacy `pi5-vcm-*` aliases:
 
-- `pi5-vcm-demo` - production harness.
-- `pi5-vcm-debug` - production harness plus timestamped wake score log.
+- `pi5-v6-demo` - v6_15m with wakeword activation.
+- `pi5-v6-debug` - same demo with a timestamped wake log.
+- `pi5-v6-vcm-only` - direct microphone mode without wakeword detection.
 
-The Pi shell may be Bash and may not have zsh installed; source the aliases only if zsh is available. Direct commands above are authoritative.
+All three load `models/onnx/v6_15m/model_int8.onnx` with its contract, enable
+reviewed v6 media actions, and enable live music playback. Other v6 labels are
+rejected. Source the alias file in an existing shell with
+`source ~/MyProjects/ee298-mlops/me2/rpi5/bash_aliases.sh`.
 
 ## Validation Completed
 
