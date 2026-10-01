@@ -8,6 +8,9 @@ the code picks it up.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 # ------------------------------------------------------------------ audio --
 SAMPLE_RATE = 16_000          # Hz, mono
 N_MELS = 80                   # log-mel bins
@@ -41,12 +44,31 @@ INTENT_TO_ID = {name: i for i, name in enumerate(INTENTS)}
 NUM_INTENTS = len(INTENTS)
 OOV_INTENT = "oov"
 
-# Runtime intent gates; volume keeps asymmetric cutoffs to avoid UP bias.
-DEFAULT_INTENT_CONFIDENCE_THRESHOLD = 0.70
+_THRESHOLD_CONFIG_PATH = Path(__file__).with_name("confidence_thresholds.json")
+with _THRESHOLD_CONFIG_PATH.open(encoding="utf-8") as _threshold_file:
+    CONFIDENCE_THRESHOLDS = json.load(_threshold_file)
+
+
+def _confidence_threshold(value, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not 0.0 <= value <= 1.0:
+        raise ValueError(f"{name} confidence threshold must be between 0 and 1")
+    return float(value)
+
+
+_intent_thresholds = CONFIDENCE_THRESHOLDS["intent"]
+DEFAULT_INTENT_CONFIDENCE_THRESHOLD = _confidence_threshold(
+    _intent_thresholds["default"], "intent")
 DEFAULT_VOLUME_INTENT_THRESHOLDS = {
-    "volume_up": 0.90,
-    "volume_down": 0.60,
+    "volume_up": _confidence_threshold(
+        _intent_thresholds["volume_up"], "volume_up"),
+    "volume_down": _confidence_threshold(
+        _intent_thresholds["volume_down"], "volume_down"),
 }
+DEFAULT_SLOT_CONFIDENCE_THRESHOLD = _confidence_threshold(
+    CONFIDENCE_THRESHOLDS["slot"], "slot")
+DEFAULT_WAKEWORD_THRESHOLD = _confidence_threshold(
+    CONFIDENCE_THRESHOLDS["wakeword"], "wakeword")
 
 # ------------------------------------------------------------- CTC vocab --
 # The slot head is a CTC decoder over a *constrained* vocabulary: digits,

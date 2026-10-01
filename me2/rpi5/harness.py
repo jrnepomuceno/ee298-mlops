@@ -23,7 +23,9 @@ from typing import Any, Callable
 from uuid import uuid4
 
 import numpy as np
-from config import DEFAULT_INTENT_CONFIDENCE_THRESHOLD, DEFAULT_VOLUME_INTENT_THRESHOLDS
+from config import (DEFAULT_INTENT_CONFIDENCE_THRESHOLD,
+                    DEFAULT_SLOT_CONFIDENCE_THRESHOLD,
+                    DEFAULT_VOLUME_INTENT_THRESHOLDS)
 
 from inference.ort_infer import (
     load_session,
@@ -67,7 +69,7 @@ class HarnessConfig:
     checkpoint: str = "vcm_model_int8.onnx"
     intent_labels_path: str | None = None
     enable_v6_actions: bool = False
-    v6_slot_threshold: float = 0.75
+    v6_slot_threshold: float = DEFAULT_SLOT_CONFIDENCE_THRESHOLD
     device: str = "cpu"
     max_frames: int = 400
     min_confidence: float = DEFAULT_INTENT_CONFIDENCE_THRESHOLD

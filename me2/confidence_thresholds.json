@@ -1,0 +1,9 @@
+{
+  "intent": {
+    "default": 0.7,
+    "volume_up": 0.9,
+    "volume_down": 0.6
+  },
+  "slot": 0.75,
+  "wakeword": 0.75
+}

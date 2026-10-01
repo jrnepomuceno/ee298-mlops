@@ -54,6 +54,13 @@ Result objects include `volume_intent_scores` with the raw UP/DOWN probabilities
 loading and routing without live device effects. `--vcm-only` enables the
 microphone pipeline; add `--live-media` to control actual playback.
 
+Confidence defaults are read at process startup from the project-root
+`confidence_thresholds.json`: `intent.default`, `intent.volume_up`,
+`intent.volume_down`, `slot`, and `wakeword`. Edit that file on the Pi to tune
+all demo aliases; restart the demo to apply changes. Intent, volume, and
+wakeword CLI options override the file for one run. Slot confidence currently
+uses the file value directly.
+
 Before an ONNX model is available, exercise every intent through the real
 facade, dry-run task executors, event generation, and reply formatting:
 

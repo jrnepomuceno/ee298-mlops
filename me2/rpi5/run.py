@@ -15,7 +15,9 @@ import warnings
 from pathlib import Path
 
 from config import (DEFAULT_INTENT_CONFIDENCE_THRESHOLD,
-                    DEFAULT_VOLUME_INTENT_THRESHOLDS)
+                    DEFAULT_SLOT_CONFIDENCE_THRESHOLD,
+                    DEFAULT_VOLUME_INTENT_THRESHOLDS,
+                    DEFAULT_WAKEWORD_THRESHOLD)
 
 from .audio import VADConfig, microphone_utterances
 from .harness import ACTION_BY_INTENT, DryRunDispatcher, FacadePipeline, HarnessConfig, PiHarness, event_json
@@ -144,8 +146,9 @@ def parse_args() -> argparse.Namespace:
                             "re-latch the wake detector (default: 4.0)")
     audio.add_argument("--wakeword", metavar="NAME",
                        help="pretrained wake-word model, e.g. alexa")
-    audio.add_argument("--wakeword-threshold", type=float, default=0.75,
-                       help="wake-word score threshold (default: 0.75)")
+    audio.add_argument("--wakeword-threshold", type=float,
+                       default=DEFAULT_WAKEWORD_THRESHOLD,
+                       help="wake-word score threshold from confidence_thresholds.json")
     audio.add_argument("--rgb-executable", metavar="PATH",
                        help="QuadcastRGB executable for DuoCast LEDs")
     audio.add_argument("--audio-player", default="pw-play",
@@ -506,6 +509,7 @@ def main() -> int:
             checkpoint=args.checkpoint,
             intent_labels_path=args.intent_labels,
             enable_v6_actions=args.enable_v6_actions,
+            v6_slot_threshold=DEFAULT_SLOT_CONFIDENCE_THRESHOLD,
             intent_thresholds=intent_thresholds,
             device=args.device,
             max_frames=args.max_frames,

@@ -12,6 +12,7 @@ import threading
 import time
 from pathlib import Path
 
+from config import DEFAULT_INTENT_CONFIDENCE_THRESHOLD
 from .audio import VADConfig, microphone_utterances
 from .facade import INTENT_SPECS
 from .harness import FacadePipeline
@@ -47,7 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-device", default=None,
                         help="PipeWire/sounddevice capture device (default: system default)")
     parser.add_argument("--confidence", type=float, default=0.99)
-    parser.add_argument("--threshold", type=float, default=0.70)
+    parser.add_argument("--threshold", type=float,
+                        default=DEFAULT_INTENT_CONFIDENCE_THRESHOLD)
     parser.add_argument("--temperature", type=int, default=22,
                         help="mock temperature set-point in Celsius (10-35)")
     parser.add_argument("--live-speaker", action="store_true",

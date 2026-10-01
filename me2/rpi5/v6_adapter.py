@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from config import DEFAULT_SLOT_CONFIDENCE_THRESHOLD
+
 
 V6_TO_RUNTIME_INTENT = {
     "PLAY_MUSIC": "play_music",
@@ -32,7 +34,8 @@ V6_ACTION_LABELS = frozenset({
 
 
 def adapt_v6_result(result: dict[str, Any], contract: dict[str, Any],
-                    slot_threshold: float = 0.75) -> dict[str, Any]:
+                    slot_threshold: float = DEFAULT_SLOT_CONFIDENCE_THRESHOLD
+                    ) -> dict[str, Any]:
     """Translate a v6 prediction for the facade; unknown classes reject safely."""
     selected_model_intent = str(result.get("intent", ""))
     model_intent = str(result.get("pre_threshold_intent", selected_model_intent))
@@ -87,7 +90,8 @@ def adapt_v6_result(result: dict[str, Any], contract: dict[str, Any],
 
 
 def adapt_v6_action_result(result: dict[str, Any], contract: dict[str, Any],
-                           slot_threshold: float = 0.75) -> dict[str, Any]:
+                           slot_threshold: float = DEFAULT_SLOT_CONFIDENCE_THRESHOLD
+                           ) -> dict[str, Any]:
     """Expose v6 labels backed by active, validated project intents."""
     adapted = adapt_v6_result(result, contract, slot_threshold)
     if (result.get("intent") not in V6_ACTION_LABELS
