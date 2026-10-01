@@ -43,12 +43,17 @@ class IntentModel(nn.Module):
             nn.Linear(hidden_size, num_intents),
         )
 
-    def forward(self, mels: torch.Tensor,
-                lengths: torch.Tensor | None = None) -> torch.Tensor:
+    def forward_sequence(self, mels: torch.Tensor) -> torch.Tensor:
         features = self.conv(mels.unsqueeze(1))
         batch, channels, steps, bins = features.shape
         features = features.permute(0, 2, 1, 3).reshape(batch, steps, channels * bins)
         sequence, _ = self.gru(self.gru_in(features))
+        return sequence
+
+    def forward(self, mels: torch.Tensor,
+                lengths: torch.Tensor | None = None) -> torch.Tensor:
+        sequence = self.forward_sequence(mels)
+        steps = sequence.shape[1]
         if lengths is None:
             pooled = sequence.mean(dim=1)
         else:

@@ -127,8 +127,9 @@ def _trim_frames(mel: np.ndarray, max_frames: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # main inference
 # ---------------------------------------------------------------------------
-def run_utterance(session, wav: np.ndarray, max_frames: int,
-                  intents: list, ctc_vocab: list) -> dict:
+def run_utterance(session, wav: np.ndarray, max_frames: int | None,
+                  intents: list, ctc_vocab: list,
+                  diagnostic_contract: dict | None = None) -> dict:
     """wav: (samples,) float32 @16 kHz -> result dict.
 
     Returns the SAME dict shape as ``inference.infer.run_utterance`` so the
@@ -136,16 +137,60 @@ def run_utterance(session, wav: np.ndarray, max_frames: int,
         {intent, intent_confidence, transcript, slots, frames, latency_ms}
     """
     wav = np.asarray(wav, dtype=np.float32).ravel()
-    mel = kaldi_fbank(wav)                     # (T, 80)
-    mel = _trim_frames(mel, max_frames)
+    feature_config = (diagnostic_contract or {}).get("feature_config", {})
+    mel = kaldi_fbank(
+        wav, snip_edges=bool(feature_config.get("snip_edges", True)))  # (T, 80)
+    if max_frames is not None:
+        mel = _trim_frames(mel, max_frames)
     if mel.shape[0] == 0:
         mel = np.zeros((1, config.N_MELS), dtype=np.float32)
     x = mel[np.newaxis, :, :].astype(np.float32)   # (1, T, 80)
 
     t0 = time.perf_counter()
-    outputs = session.run(None, {"mels": x})
+    inputs = {"mels": x}
+    get_inputs = getattr(session, "get_inputs", None)
+    if callable(get_inputs) and any(item.name == "lengths" for item in get_inputs()):
+        inputs["lengths"] = np.asarray([mel.shape[0]], dtype=np.int64)
+    outputs = session.run(None, inputs)
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
+    if diagnostic_contract and diagnostic_contract.get("task") == "intent_bounded_numeric_slots":
+        slot_labels = diagnostic_contract.get("slot_labels", [])
+        if len(outputs) != 1 + len(slot_labels):
+            raise ValueError("slot-head ONNX output count does not match its contract")
+        intent_logits = outputs[0]
+        if intent_logits.ndim != 2 or intent_logits.shape[-1] != len(intents):
+            raise ValueError(
+                "intent-only ONNX output dimension does not match its labels")
+        probs = _softmax(intent_logits[0])
+        top_id = int(np.argmax(probs))
+        intent = intents[top_id]
+        owners = diagnostic_contract.get("slot_owners", {})
+        slot_values = diagnostic_contract.get("slot_values", {})
+        slots = {}
+        for name, logits_batch in zip(slot_labels, outputs[1:]):
+            if owners.get(name) != intent:
+                continue
+            values = slot_values.get(name)
+            if not isinstance(values, list):
+                raise ValueError(f"missing value mapping for slot head {name}")
+            slot_probs = _softmax(logits_batch[0])
+            slot_index = int(np.argmax(slot_probs))
+            if slot_index >= len(values):
+                raise ValueError(f"slot head {name} index is outside its value mapping")
+            slots[name] = {
+                "value": values[slot_index],
+                "confidence": round(float(slot_probs[slot_index]), 4),
+            }
+        return {
+            "intent": intent,
+            "intent_confidence": round(float(probs[top_id]), 4),
+            "transcript": "",
+            "slots": slots,
+            "frames": int(mel.shape[0]),
+            "latency_ms": round(latency_ms, 2),
+            "backend": "intent_bounded_numeric_slots",
+        }
     if len(outputs) == 1:
         intent_logits = outputs[0]
         if intent_logits.ndim != 2 or intent_logits.shape[-1] != len(intents):
@@ -202,8 +247,12 @@ def warmup(session, n: int = 3) -> None:
     """Absorb first-call init / allocator cost so reported latency is
     steady-state (the number that matters for "instant")."""
     dummy = np.zeros((1, 100, config.N_MELS), dtype=np.float32)
+    inputs = {"mels": dummy}
+    get_inputs = getattr(session, "get_inputs", None)
+    if callable(get_inputs) and any(item.name == "lengths" for item in get_inputs()):
+        inputs["lengths"] = np.asarray([100], dtype=np.int64)
     for _ in range(max(0, int(n))):
-        session.run(None, {"mels": dummy})
+        session.run(None, inputs)
 
 
 # ---------------------------------------------------------------------------

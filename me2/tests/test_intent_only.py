@@ -18,7 +18,15 @@ class _Output:
     shape = [1, 3]
 
 
+class _Input:
+    def __init__(self, name):
+        self.name = name
+
+
 class _Session:
+    def get_inputs(self):
+        return [_Input("mels")]
+
     def get_outputs(self):
         return [_Output()]
 
@@ -38,6 +46,52 @@ class IntentOnlyInferenceTests(unittest.TestCase):
         self.assertEqual(result["slots"], {})
         self.assertEqual(result["transcript"], "")
         self.assertEqual(result["backend"], "intent_only")
+
+    def test_bounded_slot_diagnostic_decodes_owned_slot_values(self):
+        class SlotSession:
+            def get_inputs(self):
+                return [_Input("mels"), _Input("lengths")]
+
+            def run(self, _names, inputs):
+                self.asserted_lengths = inputs["lengths"].tolist()
+                intent = np.zeros((1, 3), dtype=np.float32)
+                intent[0, 1] = 10.0
+                minute = np.zeros((1, 61), dtype=np.float32)
+                minute[0, 2] = 10.0
+                second = np.zeros((1, 60), dtype=np.float32)
+                second[0, 5] = 10.0
+                alarm_hour = np.zeros((1, 12), dtype=np.float32)
+                alarm_minute = np.zeros((1, 4), dtype=np.float32)
+                alarm_meridiem = np.zeros((1, 2), dtype=np.float32)
+                degrees = np.zeros((1, 25), dtype=np.float32)
+                percent = np.zeros((1, 101), dtype=np.float32)
+                task = np.zeros((1, 2), dtype=np.float32)
+                return [intent, minute, second, alarm_hour, alarm_minute,
+                        alarm_meridiem, degrees, percent, task]
+
+        contract = {
+            "task": "intent_bounded_numeric_slots",
+            "slot_labels": ["timer_minute", "timer_second", "alarm_hour",
+                            "alarm_minute", "alarm_meridiem", "degrees",
+                            "percent", "task"],
+            "slot_owners": {"timer_minute": "TIMER", "timer_second": "TIMER"},
+            "slot_values": {"timer_minute": list(range(61)),
+                            "timer_second": list(range(60))},
+            "feature_config": {"snip_edges": False, "max_frames": None},
+        }
+        session = SlotSession()
+        with mock.patch("inference.ort_infer.kaldi_fbank",
+                        return_value=np.zeros((4, 80), dtype=np.float32)) as fbank:
+            result = run_utterance(
+                session, np.zeros(1600, dtype=np.float32), 400,
+                ["PLAY_MUSIC", "TIMER", "STOP"], [], contract)
+
+        self.assertEqual(session.asserted_lengths, [4])
+        self.assertFalse(fbank.call_args.kwargs["snip_edges"])
+        self.assertEqual(result["intent"], "TIMER")
+        self.assertEqual(result["slots"]["timer_minute"]["value"], 2)
+        self.assertEqual(result["slots"]["timer_second"]["value"], 5)
+        self.assertEqual(result["backend"], "intent_bounded_numeric_slots")
 
     def test_single_output_requires_matching_label_count(self):
         with mock.patch("inference.ort_infer.kaldi_fbank",

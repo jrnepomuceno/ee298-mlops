@@ -13,6 +13,9 @@ python -m rpi5.run --self-test --checkpoint inference/best.pt
 python -m rpi5.run --self-test \
 	--checkpoint ~/MyProjects/intent_v1/model_int8.onnx \
 	--intent-labels new_training/intent_v1_labels.json --no-warmup
+python -m rpi5.run --self-test \
+	--checkpoint models/onnx/v6_15m/model_int8.onnx \
+	--intent-labels models/onnx/v6_15m/contract.json --no-warmup --no-volume
 python -m rpi5.run --input command.wav --checkpoint inference/best.pt
 python -m rpi5.run --microphone --checkpoint inference/best.pt
 python -m rpi5.run --microphone --wakeword alexa --checkpoint inference/best.pt
@@ -29,10 +32,11 @@ python -m rpi5.run --microphone --wakeword alexa \
 ## Model-free intent scenarios
 
 The intent-only model in `~/MyProjects/intent_v1` has a different 18-label
-taxonomy and no CTC slot head. Use `--intent-labels` only with `--input` or
-`--self-test`; the harness reports raw labels and confidence without dispatching
-actions. This is a classifier diagnostic, not a replacement for the deployed
-VCM model.
+taxonomy and no CTC slot head. The `v6_15m` export has an intent head and eight
+bounded slot heads, but uses the same new-training taxonomy. Use `--intent-labels`
+only with `--input` or `--self-test`; the harness reports raw labels, confidence,
+and owned slot predictions without dispatching actions. These are diagnostics,
+not replacements for the deployed VCM model or action mappings.
 
 Before an ONNX model is available, exercise every intent through the real
 facade, dry-run task executors, event generation, and reply formatting:

@@ -27,7 +27,7 @@ This matrix tracks task/harness behavior independently of model accuracy. “Moc
 | `mute` | Disabled | Disabled | ONNX label retained for index compatibility; facade, mock catalog, and harness reject it. |
 | `oov` | Passed | Rejection | OOV/unknown intents now reply “I don't understand.” |
 
-The newer training package contains a `NEXT` label, but it is not part of the deployed model or the current intent catalog. The training-only model is not compatible with the Pi's deployed ONNX contract; there is no production `next_music` intent yet.
+The newer training package contains a `NEXT` label, but it is not part of the deployed model or the current intent catalog. The `v6_15m` slot-head model is now loadable in the Pi harness's diagnostics-only mode; it does not dispatch actions. Its 18-label taxonomy remains incompatible with the deployed VCM contract, and there is no production `next_music` intent yet. Synthetic self-test outputs are load/wiring checks, not recognition-quality evidence.
 
 ## Shared Rejection Cases
 

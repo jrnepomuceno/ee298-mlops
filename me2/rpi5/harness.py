@@ -176,23 +176,22 @@ class PiHarness:
         self.session, self._in_name, self.intents, self.ctc_vocab = load_session(
             str(checkpoint), config.threads)
         outputs = self.session.get_outputs()
-        self.intent_only = len(outputs) == 1
-        if self.intent_only:
-            if outputs[0].name != "intent_logits":
-                raise ValueError(
-                    f"unsupported intent-only output: {outputs[0].name}")
+        self.diagnostic_contract: dict[str, Any] | None = None
+        self.diagnostic_only = config.intent_labels_path is not None
+        self.max_frames = config.max_frames
+        if self.diagnostic_only:
             if config.intent_labels_path is None:
                 raise ValueError(
-                    "intent-only ONNX requires --intent-labels for diagnostics")
+                    "diagnostic ONNX requires --intent-labels contract JSON")
             labels_path = Path(config.intent_labels_path).expanduser()
             if not labels_path.is_file():
                 raise FileNotFoundError(f"intent labels not found: {labels_path}")
             label_data = json.loads(labels_path.read_text(encoding="utf-8"))
             if isinstance(label_data, dict):
-                if label_data.get("task") != "intent_classification_only":
-                    raise ValueError("intent label file has an unsupported task")
+                task = label_data.get("task")
                 labels = label_data.get("labels")
             else:
+                task = "intent_classification_only"
                 labels = label_data
             if (not isinstance(labels, list)
                     or not all(isinstance(label, str) for label in labels)):
@@ -204,10 +203,29 @@ class PiHarness:
                     f"size {output_size}")
             if len(labels) != len(set(labels)):
                 raise ValueError("intent label file contains duplicate labels")
+            if task == "intent_classification_only":
+                if len(outputs) != 1 or outputs[0].name != "intent_logits":
+                    raise ValueError("intent-only diagnostics require one intent_logits output")
+            elif task == "intent_bounded_numeric_slots":
+                slot_labels = label_data.get("slot_labels")
+                if (not isinstance(slot_labels, list)
+                        or len(outputs) != len(slot_labels) + 1
+                        or outputs[0].name != "intent_logits"):
+                    raise ValueError("slot model outputs do not match the diagnostic contract")
+                feature_config = label_data.get("feature_config", {})
+                if "max_frames" in feature_config:
+                    self.max_frames = feature_config["max_frames"]
+            else:
+                raise ValueError(f"unsupported diagnostic model task: {task!r}")
+            self.diagnostic_contract = label_data if isinstance(label_data, dict) else {
+                "task": task, "labels": labels,
+            }
             self.intents = labels
             self.ctc_vocab = []
-        elif config.intent_labels_path is not None:
-            raise ValueError("--intent-labels is only for single-output intent models")
+        elif len(outputs) != 2:
+            raise ValueError(
+                "non-diagnostic harness requires intent_logits and ctc_logits; "
+                "use --intent-labels for diagnostic-only ONNX models")
         self.dispatcher = dispatcher or DryRunDispatcher()
         self.pipeline = pipeline or FacadePipeline(threshold=config.min_confidence)
         self._warmup()
@@ -227,18 +245,19 @@ class PiHarness:
         result = run_utterance(
             self.session,
             wav,
-            self.config.max_frames,
+            self.max_frames,
             self.intents,
             self.ctc_vocab,
+            diagnostic_contract=self.diagnostic_contract,
         )
         return self._event(source, result)
 
     def recognize_and_act(self, wav: Any, source: str = "microphone") -> OrchestratorResult:
         """Recognize + run the full facade/orchestrator pipeline in one call."""
-        if self.intent_only:
-            raise RuntimeError("intent-only model is diagnostics-only; actions are disabled")
+        if self.diagnostic_only:
+            raise RuntimeError("diagnostic-only ONNX model: actions are disabled")
         wav = np.asarray(wav, dtype=np.float32).ravel()
-        result = run_utterance(self.session, wav, self.config.max_frames,
+        result = run_utterance(self.session, wav, self.max_frames,
                                self.intents, self.ctc_vocab)
         return self.pipeline.process(result, source=source)
 
@@ -248,23 +267,24 @@ class PiHarness:
             result = run_utterance(
                 self.session,
                 wav,
-                self.config.max_frames,
+                self.max_frames,
                 self.intents,
                 self.ctc_vocab,
+                diagnostic_contract=self.diagnostic_contract,
             )
             events.append(self._event(name, result))
         return events
 
     def _event(self, source: str, result: dict[str, Any]) -> dict[str, Any]:
         result = {**result, "min_confidence": self.config.min_confidence}
-        if self.intent_only:
+        if self.diagnostic_only:
             action = {
                 "status": "diagnostic_only",
                 "action": None,
                 "side_effects": False,
             }
             reply = {
-                "text": f"Intent-only model predicted {result['intent']}.",
+                "text": f"Diagnostic model predicted {result['intent']}.",
                 "speak": False,
                 "source": "diagnostic",
             }
