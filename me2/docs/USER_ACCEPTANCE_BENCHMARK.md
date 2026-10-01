@@ -1,6 +1,6 @@
 # User Acceptance Benchmark: Raspberry Pi 5
 
-**Status:** Prepared; not yet run on the target Pi.
+**Status:** Benchmarks for `v6_15m` (INT8/FP32) and `intent_v1` (INT8/FP32) executed on the Pi 5 on 2026-10-01 (see [docs/VALIDATION.md](docs/VALIDATION.md#8-pi-5-model-benchmark-v6-vs-v1-2026-10-01)).
 **Purpose:** Evaluate the exact INT8 ONNX artifact and its WAV-to-intent/slot path on the Raspberry Pi 5. Model file size is recorded for reference but has no pass/fail limit for now.
 
 ## What Is Being Tested

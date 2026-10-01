@@ -1,0 +1,298 @@
+{
+  "v6_int8": {
+    "accuracy": 0.0417,
+    "correct": 2,
+    "total": 48,
+    "latency_mean_ms": 12.89,
+    "latency_p50_ms": 11.39,
+    "latency_p95_ms": 17.26,
+    "per_class": {
+      "turn_on_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "turn_off_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "dim_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_temperature": {
+        "total": 3,
+        "correct": 0
+      },
+      "play_music": {
+        "total": 3,
+        "correct": 2
+      },
+      "pause_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_alarm": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "remind": {
+        "total": 3,
+        "correct": 0
+      },
+      "call": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_time": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_weather": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_reminders": {
+        "total": 3,
+        "correct": 0
+      },
+      "oov": {
+        "total": 3,
+        "correct": 0
+      }
+    }
+  },
+  "v6_fp32": {
+    "accuracy": 0.0417,
+    "correct": 2,
+    "total": 48,
+    "latency_mean_ms": 15.52,
+    "latency_p50_ms": 13.84,
+    "latency_p95_ms": 20.56,
+    "per_class": {
+      "turn_on_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "turn_off_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "dim_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_temperature": {
+        "total": 3,
+        "correct": 0
+      },
+      "play_music": {
+        "total": 3,
+        "correct": 2
+      },
+      "pause_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_alarm": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "remind": {
+        "total": 3,
+        "correct": 0
+      },
+      "call": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_time": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_weather": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_reminders": {
+        "total": 3,
+        "correct": 0
+      },
+      "oov": {
+        "total": 3,
+        "correct": 0
+      }
+    }
+  },
+  "v1_int8": {
+    "accuracy": 0.0625,
+    "correct": 3,
+    "total": 48,
+    "latency_mean_ms": 12.49,
+    "latency_p50_ms": 11.09,
+    "latency_p95_ms": 16.88,
+    "per_class": {
+      "turn_on_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "turn_off_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "dim_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_temperature": {
+        "total": 3,
+        "correct": 0
+      },
+      "play_music": {
+        "total": 3,
+        "correct": 2
+      },
+      "pause_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_alarm": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "remind": {
+        "total": 3,
+        "correct": 0
+      },
+      "call": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_time": {
+        "total": 3,
+        "correct": 1
+      },
+      "what_weather": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_reminders": {
+        "total": 3,
+        "correct": 0
+      },
+      "oov": {
+        "total": 3,
+        "correct": 0
+      }
+    }
+  },
+  "v1_fp32": {
+    "accuracy": 0.0625,
+    "correct": 3,
+    "total": 48,
+    "latency_mean_ms": 15.05,
+    "latency_p50_ms": 13.49,
+    "latency_p95_ms": 19.95,
+    "per_class": {
+      "turn_on_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "turn_off_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "dim_lights": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_temperature": {
+        "total": 3,
+        "correct": 0
+      },
+      "play_music": {
+        "total": 3,
+        "correct": 2
+      },
+      "pause_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_music": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "set_alarm": {
+        "total": 3,
+        "correct": 0
+      },
+      "stop_timer": {
+        "total": 3,
+        "correct": 0
+      },
+      "remind": {
+        "total": 3,
+        "correct": 0
+      },
+      "call": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_time": {
+        "total": 3,
+        "correct": 1
+      },
+      "what_weather": {
+        "total": 3,
+        "correct": 0
+      },
+      "what_reminders": {
+        "total": 3,
+        "correct": 0
+      },
+      "oov": {
+        "total": 3,
+        "correct": 0
+      }
+    }
+  }
+}

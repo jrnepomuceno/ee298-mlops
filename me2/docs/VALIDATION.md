@@ -123,3 +123,95 @@ ssh pi 'cd ~/vcm_bench && python3 benchmark.py --model vcm_model_int8.onnx --thr
 # quality on a labeled set (labels.csv: path,intent[,transcript])
 ssh pi 'cd ~/vcm_bench && python3 benchmark.py --model vcm_model_int8.onnx --threads 2 --wav-dir bench_wavs'
 ```
+
+---
+
+## 8. Pi 5 Model Benchmark: v6 vs v1 (2026-10-01)
+
+**Date:** 2026-10-01  
+**Target device:** Raspberry Pi 5 (Broadcom BCM2712 Cortex-A76 x4 @ 2.4 GHz, Linux 6.18 aarch64, glibc 2.41, ONNX Runtime 1.30.0, NumPy 2.2.4, Python 3.13.5)  
+**Configuration:** `threads=2`, `n_runs=50`, `warmup=10`, durations = 0.5s, 1.0s, 1.5s, 2.0s (true-length mel inputs).  
+**Reports:** Saved under `benchmark-results/` on both local machine and Pi 5.
+
+### 8.1 Model Specifications
+
+| Model | Variant | Task / Architecture | Size | SHA256 | Peak RSS |
+|---|---|---|---|---|---|
+| **v6_15m** | INT8 | Intent (18 classes) + 8 bounded numeric slot heads | 3.50 MB | `767da9c0717231c397fff7320d683fb79269b5b88e1ac403cd4e7f91b957584f` | 95.7 MB |
+| **v6_15m** | FP32 | Intent (18 classes) + 8 bounded numeric slot heads | 7.95 MB | `8ec820a9a6b38b8b6c9398b6cedc161384c023822545230ae534be38c65c0a1f` | 86.3 MB |
+| **v1** | INT8 | Intent classification only (18 classes) | 3.42 MB | `5cf0f5bf8b0bfbf8ad887f347c2e3313335c8eeb6bbc70cd19b3e1c8d9631427` | 95.8 MB |
+| **v1** | FP32 | Intent classification only (18 classes) | 7.67 MB | `fe112e054e01472c703fe8325e5d140c420635126311e8e60cf3124243ce1e99` | 85.6 MB |
+
+### 8.2 Latency and RTF on Pi 5 (2 Threads)
+
+#### `v6_15m` (INT8) — [benchmark-results/pi5-v6-int8-t2.json](benchmark-results/pi5-v6-int8-t2.json)
+| Audio Dur (s) | Frames | Mean (ms) | p50 (ms) | p95 (ms) | RTF | Status |
+|---|---|---|---|---|---|---|
+| 0.5 | 50 | 4.758 | 4.753 | 4.841 | 0.0095 | ✅ Pass |
+| 1.0 | 100 | 11.222 | 10.986 | 12.209 | 0.0112 | ✅ Pass |
+| 1.5 | 150 | 18.075 | 18.047 | 18.253 | 0.0121 | ✅ Pass |
+| 2.0 | 200 | 24.933 | 24.911 | 25.137 | 0.0125 | ✅ Pass |
+
+#### `v6_15m` (FP32) — [benchmark-results/pi5-v6-fp32-t2.json](benchmark-results/pi5-v6-fp32-t2.json)
+| Audio Dur (s) | Frames | Mean (ms) | p50 (ms) | p95 (ms) | RTF | Status |
+|---|---|---|---|---|---|---|
+| 0.5 | 50 | 7.208 | 7.202 | 7.289 | 0.0144 | ✅ Pass |
+| 1.0 | 100 | 13.928 | 13.721 | 14.530 | 0.0139 | ✅ Pass |
+| 1.5 | 150 | 20.531 | 20.528 | 20.627 | 0.0137 | ✅ Pass |
+| 2.0 | 200 | 27.464 | 27.445 | 27.577 | 0.0137 | ✅ Pass |
+
+#### `v1` (INT8) — [benchmark-results/pi5-v1-int8-t2.json](benchmark-results/pi5-v1-int8-t2.json)
+| Audio Dur (s) | Frames | Mean (ms) | p50 (ms) | p95 (ms) | RTF | Status |
+|---|---|---|---|---|---|---|
+| 0.5 | 50 | 4.788 | 4.784 | 4.840 | 0.0096 | ✅ Pass |
+| 1.0 | 100 | 11.166 | 11.147 | 11.276 | 0.0112 | ✅ Pass |
+| 1.5 | 150 | 18.936 | 18.630 | 19.128 | 0.0126 | ✅ Pass |
+| 2.0 | 200 | 25.917 | 25.750 | 26.020 | 0.0130 | ✅ Pass |
+
+#### `v1` (FP32) — [benchmark-results/pi5-v1-fp32-t2.json](benchmark-results/pi5-v1-fp32-t2.json)
+| Audio Dur (s) | Frames | Mean (ms) | p50 (ms) | p95 (ms) | RTF | Status |
+|---|---|---|---|---|---|---|
+| 0.5 | 50 | 7.206 | 7.026 | 8.055 | 0.0144 | ✅ Pass |
+| 1.0 | 100 | 13.533 | 13.540 | 13.615 | 0.0135 | ✅ Pass |
+| 1.5 | 150 | 20.433 | 20.270 | 20.406 | 0.0136 | ✅ Pass |
+| 2.0 | 200 | 27.364 | 27.194 | 27.551 | 0.0137 | ✅ Pass |
+
+### 8.3 Acceptance Findings
+
+1. **RTF Threshold (<= 0.3):**
+   - All models achieve RTF between **0.0095 and 0.0144** on the Pi 5.
+   - Inference runs approximately **70x to 105x faster than real-time audio**.
+2. **p95 Latency Threshold (< 100 ms):**
+   - For 1.0 s commands: **11.3–14.5 ms**.
+   - For 2.0 s commands: **25.1–27.6 ms**.
+   - Clears the 100 ms latency requirement with a ~4x safety margin.
+3. **v6 Multi-Head vs v1 Intent-Only Overhead:**
+   - Evaluating the 8 additional bounded slot classification heads in `v6_15m` introduces **zero measurable latency overhead** on the Pi 5 (24.9 ms for v6_int8 vs 25.9 ms for v1_int8 at 2.0 s).
+4. **Quantization Benefit:**
+   - INT8 dynamic quantization cuts disk usage by **56%** (3.4–3.5 MB vs 7.7–8.0 MB).
+   - Lowers 0.5 s utterance latency from ~7.2 ms to ~4.7 ms.
+   - Peak RSS is ~96 MB across INT8 models, well within the Pi 5 memory profile.
+
+### 8.4 Quality Evaluation Across Datasets
+
+#### 1. Held-Out Human Speech Benchmark Dataset (`test.jsonl`, 17,154 real speech recordings)
+Evaluated on the held-out test split of `training_package_capped`:
+
+| Model | Variant | Test Samples | Intent Accuracy | Intent Macro-F1 | Notes |
+|---|---|---|---|---|---|
+| **v1** | INT8 | 17,154 (Full) | **97.77%** | **95.74%** | Full test evaluation (Loss: 0.0766) |
+| **v1** | INT8 | 500 (Slice) | **97.20%** | — | Evaluated via ONNX Runtime CPU |
+| **v6_15m** | FP32 | 500 (Slice) | **96.60%** | — | Multi-head with 8 bounded slot heads |
+| **v6_15m** | INT8 | 500 (Slice) | **96.40%** | — | Quantization degradation is only 0.2% (1 sample diff) |
+
+#### 2. Synthetic Smoke Benchmark Dataset (`bench_wavs/`, 48 formant-tone WAVs)
+Evaluated directly on the Pi 5 via `inference/benchmark.py`:
+
+| Model | Variant | Labeled Samples | Intent Accuracy | Mean Latency (ms) | p95 Latency (ms) |
+|---|---|---|---|---|---|
+| **v6_15m** | INT8 | 48 | 4.17% (2/48) | 12.89 ms | 17.26 ms |
+| **v6_15m** | FP32 | 48 | 4.17% (2/48) | 15.52 ms | 20.56 ms |
+| **v1** | INT8 | 48 | 6.25% (3/48) | 12.49 ms | 16.88 ms |
+| **v1** | FP32 | 48 | 6.25% (3/48) | 15.05 ms | 19.95 ms |
+
+*Note:* `bench_wavs` consists of artificial formant-tone sweeps generated by a toy sine-wave synthesizer (not human speech). As documented in Section 5, it serves as a pipeline/wiring smoke test rather than an accuracy benchmark for models trained on real human speech. Real speech accuracy is confirmed on `test.jsonl` above.

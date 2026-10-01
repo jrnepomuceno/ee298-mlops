@@ -1,0 +1,70 @@
+{
+  "model": "models/onnx/v6_15m/model_fp32.onnx",
+  "model_sha256": "8ec820a9a6b38b8b6c9398b6cedc161384c023822545230ae534be38c65c0a1f",
+  "model_size_mb": 7.952,
+  "threads": 2,
+  "env_before": {
+    "machine": "aarch64",
+    "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+    "cpu_count": 4,
+    "python": "3.13.5",
+    "numpy": "2.2.4",
+    "onnxruntime": "1.30.0",
+    "arm_clock_ghz": 2.4,
+    "temp_c": "temp=54.9'C",
+    "throttled": "throttled=0x0"
+  },
+  "env_after": {
+    "machine": "aarch64",
+    "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+    "cpu_count": 4,
+    "python": "3.13.5",
+    "numpy": "2.2.4",
+    "onnxruntime": "1.30.0",
+    "arm_clock_ghz": 2.4,
+    "temp_c": "temp=59.3'C",
+    "throttled": "throttled=0x0"
+  },
+  "peak_rss_mb": 86.3,
+  "rows": [
+    {
+      "duration_s": 0.5,
+      "frames": 50,
+      "mean_ms": 7.208,
+      "p50_ms": 7.202,
+      "p95_ms": 7.289,
+      "rtf": 0.0144
+    },
+    {
+      "duration_s": 1.0,
+      "frames": 100,
+      "mean_ms": 13.928,
+      "p50_ms": 13.721,
+      "p95_ms": 14.53,
+      "rtf": 0.0139
+    },
+    {
+      "duration_s": 1.5,
+      "frames": 150,
+      "mean_ms": 20.531,
+      "p50_ms": 20.528,
+      "p95_ms": 20.627,
+      "rtf": 0.0137
+    },
+    {
+      "duration_s": 2.0,
+      "frames": 200,
+      "mean_ms": 27.464,
+      "p50_ms": 27.445,
+      "p95_ms": 27.577,
+      "rtf": 0.0137
+    }
+  ],
+  "quality": null,
+  "soak": null,
+  "pass": {
+    "rtf_le_0.3": true,
+    "latency_p95_lt_100ms": true,
+    "intent_acc_ge_0.9": null
+  }
+}

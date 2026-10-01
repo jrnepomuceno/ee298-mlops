@@ -1,0 +1,70 @@
+{
+  "model": "/home/jdrnepomuceno9/MyProjects/intent_v1/model_int8.onnx",
+  "model_sha256": "5cf0f5bf8b0bfbf8ad887f347c2e3313335c8eeb6bbc70cd19b3e1c8d9631427",
+  "model_size_mb": 3.416,
+  "threads": 2,
+  "env_before": {
+    "machine": "aarch64",
+    "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+    "cpu_count": 4,
+    "python": "3.13.5",
+    "numpy": "2.2.4",
+    "onnxruntime": "1.30.0",
+    "arm_clock_ghz": 2.4,
+    "temp_c": "temp=56.0'C",
+    "throttled": "throttled=0x0"
+  },
+  "env_after": {
+    "machine": "aarch64",
+    "platform": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.41",
+    "cpu_count": 4,
+    "python": "3.13.5",
+    "numpy": "2.2.4",
+    "onnxruntime": "1.30.0",
+    "arm_clock_ghz": 2.4,
+    "temp_c": "temp=58.2'C",
+    "throttled": "throttled=0x0"
+  },
+  "peak_rss_mb": 95.8,
+  "rows": [
+    {
+      "duration_s": 0.5,
+      "frames": 50,
+      "mean_ms": 4.788,
+      "p50_ms": 4.784,
+      "p95_ms": 4.84,
+      "rtf": 0.0096
+    },
+    {
+      "duration_s": 1.0,
+      "frames": 100,
+      "mean_ms": 11.166,
+      "p50_ms": 11.147,
+      "p95_ms": 11.276,
+      "rtf": 0.0112
+    },
+    {
+      "duration_s": 1.5,
+      "frames": 150,
+      "mean_ms": 18.936,
+      "p50_ms": 18.63,
+      "p95_ms": 19.128,
+      "rtf": 0.0126
+    },
+    {
+      "duration_s": 2.0,
+      "frames": 200,
+      "mean_ms": 25.917,
+      "p50_ms": 25.75,
+      "p95_ms": 26.02,
+      "rtf": 0.013
+    }
+  ],
+  "quality": null,
+  "soak": null,
+  "pass": {
+    "rtf_le_0.3": true,
+    "latency_p95_lt_100ms": true,
+    "intent_acc_ge_0.9": null
+  }
+}
