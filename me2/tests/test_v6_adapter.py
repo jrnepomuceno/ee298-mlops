@@ -4,6 +4,7 @@ from __future__ import annotations
 import unittest
 
 from rpi5.v6_adapter import adapt_v6_action_result, adapt_v6_result
+from rpi5.harness import FacadePipeline
 
 
 def _slot(value, confidence=0.99):
@@ -52,6 +53,13 @@ class V6AdapterTests(unittest.TestCase):
         result = adapt_v6_action_result(adjusted, {})
         self.assertEqual(result["intent"], "volume_down")
         self.assertEqual(result["model_intent"], "VOLUME_UP")
+
+    def test_action_mode_allows_time_query(self):
+        result = adapt_v6_action_result(self._result("TIME"), {})
+        self.assertEqual(result["intent"], "what_time")
+        outcome = FacadePipeline(dry_run=True).process(result, source="test")
+        self.assertTrue(outcome.handled)
+        self.assertEqual(outcome.request.action_code, "query.time")
 
     def test_unmapped_message_rejects_instead_of_dispatching(self):
         result = adapt_v6_result(self._result("MESSAGE"), {})
