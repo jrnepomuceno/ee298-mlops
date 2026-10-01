@@ -686,13 +686,13 @@ def main() -> int:
                                     wav_player.play(path, preroll_ms=preroll_ms),
                                 kind="tts"))
                             if index + 1 < len(temp_paths):
-                                time.sleep(0.5)
+                                time.sleep(0.2)
                         current_event["tts"] = {
                             "played": True,
                             "source": "piper",
                             "text": getattr(action, "reply_text", ""),
                             "segments": len(temp_paths),
-                            "inter_item_pause_ms": 800,
+                            "inter_item_pause_ms": 500,
                             "playback": playback,
                         }
                     finally:
