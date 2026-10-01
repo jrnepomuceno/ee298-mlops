@@ -39,6 +39,7 @@ from .replies import build_reply
 from .facade import (ActionRequest, DEFAULT_CONFIDENCE_THRESHOLD,
                      RejectResult, decode)
 from .orchestrator import Orchestrator, OrchestratorResult, default_orchestrator
+from .v1_adapter import adapt_v1_action_result
 from .v6_adapter import adapt_v6_action_result
 
 
@@ -70,6 +71,8 @@ class HarnessConfig:
     intent_labels_path: str | None = None
     enable_v6_actions: bool = False
     v6_slot_threshold: float = DEFAULT_SLOT_CONFIDENCE_THRESHOLD
+    enable_v1_actions: bool = False
+    v1_default_slots: bool = True
     device: str = "cpu"
     max_frames: int = 400
     min_confidence: float = DEFAULT_INTENT_CONFIDENCE_THRESHOLD
@@ -193,6 +196,10 @@ class PiHarness:
         }
         if config.enable_v6_actions and not config.intent_labels_path:
             raise ValueError("v6 actions require --intent-labels contract JSON")
+        if config.enable_v1_actions and not config.intent_labels_path:
+            raise ValueError("v1 actions require --intent-labels contract JSON")
+        if config.enable_v6_actions and config.enable_v1_actions:
+            raise ValueError("cannot enable both v1 and v6 actions simultaneously")
         checkpoint = resolve_checkpoint(config.checkpoint)
         if not checkpoint.exists():
             raise FileNotFoundError(f"checkpoint not found: {checkpoint}")
@@ -202,8 +209,10 @@ class PiHarness:
         outputs = self.session.get_outputs()
         self.diagnostic_contract: dict[str, Any] | None = None
         self.v6_actions_enabled = config.enable_v6_actions
+        self.v1_actions_enabled = config.enable_v1_actions
         self.diagnostic_only = (config.intent_labels_path is not None
-                    and not self.v6_actions_enabled)
+                    and not self.v6_actions_enabled
+                    and not self.v1_actions_enabled)
         self.max_frames = config.max_frames
         if config.intent_labels_path is not None:
             if config.intent_labels_path is None:
@@ -232,6 +241,8 @@ class PiHarness:
             if task == "intent_classification_only":
                 if len(outputs) != 1 or outputs[0].name != "intent_logits":
                     raise ValueError("intent-only diagnostics require one intent_logits output")
+                if self.v6_actions_enabled:
+                    raise ValueError("v6 actions require a bounded-slot model contract")
             elif task == "intent_bounded_numeric_slots":
                 slot_labels = label_data.get("slot_labels")
                 if (not isinstance(slot_labels, list)
@@ -241,11 +252,16 @@ class PiHarness:
                 feature_config = label_data.get("feature_config", {})
                 if "max_frames" in feature_config:
                     self.max_frames = feature_config["max_frames"]
+                if self.v1_actions_enabled:
+                    raise ValueError("v1 actions require an intent-only model contract")
             else:
                 raise ValueError(f"unsupported diagnostic model task: {task!r}")
             if (self.v6_actions_enabled
                     and task != "intent_bounded_numeric_slots"):
                 raise ValueError("v6 actions require a bounded-slot model contract")
+            if (self.v1_actions_enabled
+                    and task != "intent_classification_only"):
+                raise ValueError("v1 actions require an intent-only model contract")
             self.diagnostic_contract = label_data if isinstance(label_data, dict) else {
                 "task": task, "labels": labels,
             }
@@ -295,6 +311,10 @@ class PiHarness:
             result = adapt_v6_action_result(
                 result, self.diagnostic_contract or {},
                 self.config.v6_slot_threshold)
+        elif self.v1_actions_enabled:
+            result = adapt_v1_action_result(
+                result, self.diagnostic_contract or {},
+                default_slots=self.config.v1_default_slots)
         return self.pipeline.process(result, source=source)
 
     def recognize_self_test(self) -> list[dict[str, Any]]:
@@ -317,6 +337,10 @@ class PiHarness:
             result = adapt_v6_action_result(
                 result, self.diagnostic_contract or {},
                 self.config.v6_slot_threshold)
+        elif self.v1_actions_enabled:
+            result = adapt_v1_action_result(
+                result, self.diagnostic_contract or {},
+                default_slots=self.config.v1_default_slots)
         intent = result.get("intent")
         if not isinstance(intent, str):
             intent = "oov"

@@ -114,9 +114,13 @@ def parse_args() -> argparse.Namespace:
     model.add_argument("--checkpoint", default=_ckpt_default,
                        help="VCM ONNX model (default: newest models/onnx/<tag>/vcm_model_int8.onnx)")
     model.add_argument("--intent-labels", default=None,
-                       help="load an intent/slot contract JSON; diagnostic-only unless --enable-v6-actions is set")
+                       help="load an intent/slot contract JSON; diagnostic-only unless --enable-v6-actions or --enable-v1-actions is set")
     model.add_argument("--enable-v6-actions", action="store_true",
                        help="enable v6 actions supported by the project runtime")
+    model.add_argument("--enable-v1-actions", action="store_true",
+                       help="enable v1 intent-only actions supported by the project runtime")
+    model.add_argument("--v1-no-default-slots", action="store_true",
+                       help="disable fallback default slots for v1 slot-requiring intents")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")
@@ -290,11 +294,13 @@ def main() -> int:
         "volume_up": args.volume_up_threshold,
         "volume_down": args.volume_down_threshold,
     }
-    if args.intent_labels and not args.enable_v6_actions \
+    if args.enable_v6_actions and args.enable_v1_actions:
+        raise SystemExit("choose either --enable-v6-actions or --enable-v1-actions, not both")
+    if args.intent_labels and not (args.enable_v6_actions or args.enable_v1_actions) \
             and not (args.input or args.self_test):
-        raise SystemExit("--intent-labels is diagnostics-only without --enable-v6-actions")
-    if args.enable_v6_actions and not args.intent_labels:
-        raise SystemExit("--enable-v6-actions requires --intent-labels contract JSON")
+        raise SystemExit("--intent-labels is diagnostics-only without --enable-v6-actions or --enable-v1-actions")
+    if (args.enable_v6_actions or args.enable_v1_actions) and not args.intent_labels:
+        raise SystemExit("--enable-v6-actions and --enable-v1-actions require --intent-labels contract JSON")
     configure_logging()
     sys.excepthook = log_uncaught_exception
     light_driver = make_light_driver(args.light_driver, args.light_executable)
@@ -510,6 +516,8 @@ def main() -> int:
             intent_labels_path=args.intent_labels,
             enable_v6_actions=args.enable_v6_actions,
             v6_slot_threshold=DEFAULT_SLOT_CONFIDENCE_THRESHOLD,
+            enable_v1_actions=args.enable_v1_actions,
+            v1_default_slots=not args.v1_no_default_slots,
             intent_thresholds=intent_thresholds,
             device=args.device,
             max_frames=args.max_frames,
