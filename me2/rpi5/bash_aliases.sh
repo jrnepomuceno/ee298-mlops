@@ -11,7 +11,7 @@ _pi5_v6_demo() {
     set +a
     mkdir -p logs
 
-    exec "$HOME/piper-venv/bin/python" -m rpi5.run \
+    "$HOME/piper-venv/bin/python" -m rpi5.run \
         --checkpoint models/onnx/v6_15m/model_int8.onnx \
         --intent-labels models/onnx/v6_15m/contract.json \
         --enable-v6-actions --live-media --device cpu \
@@ -38,7 +38,7 @@ _pi5_v1_demo() {
     set +a
     mkdir -p logs
 
-    exec "$HOME/piper-venv/bin/python" -m rpi5.run "$@" \
+    "$HOME/piper-venv/bin/python" -m rpi5.run "$@" \
         --checkpoint "$HOME/MyProjects/intent_v1/model_int8.onnx" \
         --intent-labels "$repo/new_training/intent_v1_labels.json" \
         --enable-v1-actions --live-media --device cpu \
