@@ -127,14 +127,23 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _make_inputs(sess, in_name: str, mels: np.ndarray) -> dict:
+    inputs = {in_name: mels}
+    get_inputs = getattr(sess, "get_inputs", None)
+    if callable(get_inputs) and any(item.name == "lengths" for item in get_inputs()):
+        inputs["lengths"] = np.asarray([mels.shape[1]], dtype=np.int64)
+    return inputs
+
+
 def bench_one(sess, in_name, mels, n_runs, warmup):
     """Time session.run() only. Returns (mean_ms, p50_ms, p95_ms)."""
+    inputs = _make_inputs(sess, in_name, mels)
     for _ in range(max(0, warmup)):
-        sess.run(None, {in_name: mels})
+        sess.run(None, inputs)
     lats = []
     for _ in range(n_runs):
         t0 = time.perf_counter()
-        sess.run(None, {in_name: mels})
+        sess.run(None, inputs)
         lats.append((time.perf_counter() - t0) * 1000.0)
     lats = np.array(lats)
     return float(lats.mean()), float(np.percentile(lats, 50)), \
@@ -279,11 +288,16 @@ def run_wavs(sess, in_name, args):
         rtf = mean / audio_ms
         feature_plus_model_ms = feature_ms + mean
 
-        intent_logits, ctc_logits = sess.run(None, {in_name: mels})
-        pred_intent = INTENTS[int(np.argmax(intent_logits[0]))]
+        inputs = _make_inputs(sess, in_name, mels)
+        outputs = sess.run(None, inputs)
+        intent_logits = outputs[0]
+        if len(outputs) == 2:
+            transcript = " ".join(ctc_greedy_decode(outputs[1][0]))
+        else:
+            transcript = ""
+        pred_intent = INTENTS[int(np.argmax(intent_logits[0]))] if int(np.argmax(intent_logits[0])) < len(INTENTS) else f"intent_{int(np.argmax(intent_logits[0]))}"
         pred_conf = float(softmax(intent_logits[0]).max())
-        transcript = " ".join(ctc_greedy_decode(ctc_logits[0]))
-        pred_slots = parse_slots(pred_intent, transcript)
+        pred_slots = parse_slots(pred_intent, transcript) if transcript else {}
         row = {"file": wav_path.name, "duration_s": round(len(wav) / SR, 2),
                "frames": frame_count, "mean_ms": round(mean, 3),
                "p50_ms": round(p50, 3), "p95_ms": round(p95, 3),
@@ -357,9 +371,10 @@ def main() -> int:
         T = frames_for_seconds(1.0)
         dummy = np.random.default_rng(1).standard_normal(
             (1, T, N_MELS)).astype(np.float32)
+        soak_inputs = _make_inputs(sess, in_name, dummy)
         t_end = time.time() + args.soak
         while time.time() < t_end:
-            sess.run(None, {in_name: dummy})
+            sess.run(None, soak_inputs)
         env_after_soak = env_snapshot()
         mean, p50, p95 = bench_one(sess, in_name, dummy, args.n_runs, args.warmup)
         audio_ms = T * HOP_MS
