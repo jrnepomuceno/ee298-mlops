@@ -84,6 +84,7 @@ class TimerManager:
 
     def __init__(self, on_expire: Callable[[TimerState], None] | None = None) -> None:
         self.on_expire = on_expire
+        self._countdown_delivery_lock = threading.RLock()
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
         self._state: TimerState | None = None
@@ -99,22 +100,23 @@ class TimerManager:
         if numeric_duration <= 0 or normalized_unit not in SECONDS_PER_UNIT:
             raise ValueError("timer duration or unit is invalid")
 
-        with self._lock:
-            self._cancel_locked()
-            state = TimerState(
-                timer_id=uuid4().hex,
-                duration=numeric_duration,
-                unit=normalized_unit,
-            )
-            timer = threading.Timer(
-                numeric_duration * SECONDS_PER_UNIT[normalized_unit],
-                self._expire,
-                args=(state,),
-            )
-            timer.daemon = True
-            self._state = state
-            self._timer = timer
-            timer.start()
+        with self._countdown_delivery_lock:
+            with self._lock:
+                self._cancel_locked()
+                state = TimerState(
+                    timer_id=uuid4().hex,
+                    duration=numeric_duration,
+                    unit=normalized_unit,
+                )
+                timer = threading.Timer(
+                    numeric_duration * SECONDS_PER_UNIT[normalized_unit],
+                    self._expire,
+                    args=(state,),
+                )
+                timer.daemon = True
+                self._state = state
+                self._timer = timer
+                timer.start()
         return {
             "status": "executed",
             "action": "timer.set",
@@ -175,9 +177,10 @@ class TimerManager:
 
     def cancel(self) -> dict[str, object]:
         """Cancel the active countdown timer (does not touch the alarm)."""
-        with self._lock:
-            state = self._state
-            self._cancel_locked()
+        with self._countdown_delivery_lock:
+            with self._lock:
+                state = self._state
+                self._cancel_locked()
         return {
             "status": "executed" if state else "rejected",
             "action": "timer.cancel" if state else None,
@@ -200,18 +203,22 @@ class TimerManager:
         }
 
     def close(self) -> None:
-        with self._lock:
-            self._cancel_locked()
-            self._clear_alarm_locked()
+        with self._countdown_delivery_lock:
+            with self._lock:
+                self._cancel_locked()
+                self._clear_alarm_locked()
 
     def _expire(self, state: TimerState) -> None:
-        with self._lock:
-            if self._state != state:
-                return
-            self._timer = None
-            self._state = None
-        if self.on_expire is not None:
-            self.on_expire(state)
+        # Serialize countdown expiry delivery with cancel/start so stop_timer
+        # cannot miss an expiry that has cleared its state but not called back.
+        with self._countdown_delivery_lock:
+            with self._lock:
+                if self._state != state:
+                    return
+                self._timer = None
+                self._state = None
+            if self.on_expire is not None:
+                self.on_expire(state)
 
     def _alarm_expire(self, state: AlarmState) -> None:
         with self._lock:

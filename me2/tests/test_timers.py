@@ -402,6 +402,47 @@ class TimerAlarmLoopTests(unittest.TestCase):
 
 
 class TimerExecutorAlarmTests(unittest.TestCase):
+    def test_stop_timer_cancels_alarm_starting_from_expiry_callback(self):
+        callback_entered = threading.Event()
+        allow_alarm_start = threading.Event()
+        cancel_entered = threading.Event()
+        cancel_done = threading.Event()
+        alarm = TimerAlarm(lambda: None, lambda: None, ring_gap_s=0.01)
+
+        def on_expire(_state):
+            callback_entered.set()
+            allow_alarm_start.wait(timeout=2.0)
+            alarm.start()
+
+        class ObservedTimerManager(TimerManager):
+            def cancel(self):
+                cancel_entered.set()
+                return super().cancel()
+
+        manager = ObservedTimerManager(on_expire=on_expire)
+        executor = TimerExecutor(dry_run=False, manager=manager, alarm=alarm)
+        result_holder = []
+
+        def cancel_timer():
+            result_holder.append(executor.run(decode("stop_timer", {}, 0.99,
+                                                       dry_run=False)))
+            cancel_done.set()
+
+        manager.set_timer(0.01, "second")
+        self.assertTrue(callback_entered.wait(timeout=1.0))
+        thread = threading.Thread(target=cancel_timer, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(cancel_entered.wait(timeout=1.0))
+            self.assertFalse(cancel_done.wait(timeout=0.1))
+        finally:
+            allow_alarm_start.set()
+        self.assertTrue(cancel_done.wait(timeout=2.0))
+        self.assertTrue(result_holder[0].ok)
+        self.assertFalse(alarm.active)
+        manager.close()
+        alarm.stop()
+
     def test_stop_timer_stops_ringing_after_countdown_has_expired(self):
         from rpi5.timer import TimerAlarm
 
