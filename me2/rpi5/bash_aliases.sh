@@ -15,7 +15,7 @@ _pi5_v6_demo() {
         --checkpoint models/onnx/v6_15m/model_int8.onnx \
         --intent-labels models/onnx/v6_15m/contract.json \
         --enable-v6-actions --live-media --device cpu \
-        --wakeword-threshold 0.8 \
+        --wakeword-threshold 0.7 \
         --audio-player pw-play --audio-device WILLEN \
         --reply-dir "$repo/assets/replies" \
         --ack-wav "$repo/assets/replies/ack_beep.wav" \
@@ -23,8 +23,8 @@ _pi5_v6_demo() {
         "$@"
 }
 
-alias pi5-v6-demo='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.8'
-alias pi5-v6-debug='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.8 --wakeword-log "$HOME/MyProjects/ee298-mlops/me2/logs/v6-demo-wake.log"'
+alias pi5-v6-demo='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.7'
+alias pi5-v6-debug='_pi5_v6_demo --microphone --wakeword alexa --wakeword-threshold 0.7 --wakeword-log "$HOME/MyProjects/ee298-mlops/me2/logs/v6-demo-wake.log"'
 alias pi5-v6-vcm-only='_pi5_v6_demo --vcm-only'
 
 _pi5_v1_demo() {
