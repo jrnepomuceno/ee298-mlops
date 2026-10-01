@@ -223,8 +223,8 @@ def parse_args() -> argparse.Namespace:
     warmup.add_argument("--warmup-wav",
                         default="assets/replies/willen_mini_beep.wav",
                         help="WILLEN priming WAV")
-    warmup.add_argument("--warmup-beeps", type=int, default=5,
-                        help="number of priming beeps (default: 5)")
+    warmup.add_argument("--warmup-beeps", type=int, default=3,
+                        help="number of priming beeps (default: 3)")
     warmup.add_argument("--warmup-beep-delay", type=float, default=4.0,
                         help="delay before priming beeps in seconds (default: 4)")
     warmup.add_argument("--no-warmup", action="store_true",
@@ -690,10 +690,8 @@ def main() -> int:
                             piper_tts.synthesize(segment, temp_paths[-1])
                         playback = []
                         for index, path in enumerate(temp_paths):
-                            preroll_ms = 750 if index == 0 else 0
                             playback.append(_ducked_play(
-                                lambda path=path, preroll_ms=preroll_ms:
-                                    wav_player.play(path, preroll_ms=preroll_ms),
+                                lambda path=path: wav_player.play(path),
                                 kind="tts"))
                             if index + 1 < len(temp_paths):
                                 time.sleep(0.2)
