@@ -186,6 +186,15 @@ class MediaPlayerController:
         self._paused = False
         return track.name
 
+    def next_track(self,
+                   before_start: Callable[[str], bool] | None = None) -> str:
+        """Stop the current track and start a different available track."""
+        self.stop()
+        track = self._pick()
+        if before_start is not None:
+            before_start(track.name)
+        return self._start_track(track)
+
     def pause(self) -> bool:
         """Pause playback. Returns True if paused, False if nothing to pause.
 

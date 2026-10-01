@@ -109,7 +109,9 @@ def parse_args() -> argparse.Namespace:
     model.add_argument("--checkpoint", default=_ckpt_default,
                        help="VCM ONNX model (default: newest models/onnx/<tag>/vcm_model_int8.onnx)")
     model.add_argument("--intent-labels", default=None,
-                       help="enable diagnostics-only mode for a single-output intent ONNX and load its label JSON")
+                       help="load an intent/slot contract JSON; diagnostic-only unless --enable-v6-actions is set")
+    model.add_argument("--enable-v6-actions", action="store_true",
+                       help="enable reviewed v6 music actions (PLAY_MUSIC, NEXT, PAUSE, STOP)")
     model.add_argument("--device", default="cpu",
                        choices=["auto", "cpu", "cuda", "mps"],
                        help="informational; the ONNX path always runs on CPU")
@@ -264,8 +266,11 @@ def print_microphone_intro(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parse_args()
-    if args.intent_labels and not (args.input or args.self_test):
-        raise SystemExit("--intent-labels is diagnostics-only; use --input or --self-test (no microphone/actions)")
+    if args.intent_labels and not args.enable_v6_actions \
+            and not (args.input or args.self_test):
+        raise SystemExit("--intent-labels is diagnostics-only without --enable-v6-actions")
+    if args.enable_v6_actions and not args.intent_labels:
+        raise SystemExit("--enable-v6-actions requires --intent-labels contract JSON")
     configure_logging()
     sys.excepthook = log_uncaught_exception
     light_driver = make_light_driver(args.light_driver, args.light_executable)
@@ -368,13 +373,10 @@ def main() -> int:
                     and os.path.isfile(args.piper_model)):
                 piper_tts = PiperTts(args.piper_bin, args.piper_model)
 
-            def announce_music_track(track_name: str) -> bool:
+            def announce_music_track(reply_text: str) -> bool:
                 nonlocal post_reply_until
                 if piper_tts is None or wav_player is None:
                     return False
-                verb = ("Resuming" if media_player is not None
-                    and media_player.is_paused else "Playing")
-                reply_text = f"{verb} {Path(track_name).stem}"
                 with tempfile.NamedTemporaryFile(
                         prefix="pi5-vcm-music-", suffix=".wav", delete=False) as tmp:
                     tmp_path = tmp.name
@@ -481,6 +483,7 @@ def main() -> int:
         harness = PiHarness(HarnessConfig(
             checkpoint=args.checkpoint,
             intent_labels_path=args.intent_labels,
+            enable_v6_actions=args.enable_v6_actions,
             device=args.device,
             max_frames=args.max_frames,
             min_confidence=args.min_confidence,
@@ -649,7 +652,7 @@ def main() -> int:
             def play_reply(result, action):
                 execution = getattr(action, "execution", None)
                 payload = getattr(execution, "payload", {}) or {}
-                if (result.get("intent") == "play_music"
+                if (result.get("intent") in {"play_music", "next_music"}
                         and payload.get("announced_before_play")):
                     current_event["tts"] = {
                         "played": True,
@@ -709,7 +712,8 @@ def main() -> int:
                 # "Music paused", "Music stopped"), so Piper uses the live
                 # reply rather than a static WAV.
                 _dynamic_intents = ("what_time", "what_weather", "what_reminders",
-                                    "pause_music", "stop_music", "set_timer")
+                                    "pause_music", "stop_music", "set_timer",
+                                    "next_music")
                 if result.get("intent") in _dynamic_intents and piper_tts:
                     # Prefer the facade/live reply already computed during
                     # infer_command (it carries the real weather line / clock /

@@ -217,6 +217,16 @@ class TransportTests(unittest.TestCase):
         self.assertTrue(self.runner.procs[0].terminated)
         self.assertEqual(len(self.runner.calls), 2)
 
+    def test_next_track_stops_current_and_selects_another(self):
+        make_dir(self.tmp, names=("c.ogg",))
+        first = self.ctrl.play()
+
+        next_track = self.ctrl.next_track()
+
+        self.assertNotEqual(next_track, first)
+        self.assertTrue(self.runner.procs[0].terminated)
+        self.assertEqual(len(self.runner.calls), 2)
+
 
 class FailureTests(unittest.TestCase):
     def setUp(self):
@@ -300,8 +310,7 @@ class ExecutorTests(unittest.TestCase):
         ex = MediaExecutor(
             dry_run=False,
             player=ctrl,
-            before_play=lambda name: order.append(
-                f"Playing {Path(name).stem}") or True,
+            before_play=lambda phrase: order.append(phrase) or True,
         )
 
         result = ex.run(self._decode("play_music"))
@@ -316,7 +325,7 @@ class ExecutorTests(unittest.TestCase):
         ex = MediaExecutor(
             dry_run=False,
             player=self.ctrl,
-            before_play=lambda name: name == first,
+            before_play=lambda phrase: phrase == f"Resuming {Path(first).stem}",
         )
 
         result = ex.run(self._decode("play_music"))
@@ -324,6 +333,23 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual(result.detail, f"Resuming {Path(first).stem}")
         self.assertEqual(result.payload["track"], first)
         self.assertTrue(result.payload["announced_before_play"])
+
+    def test_next_music_skips_current_and_announces_selected_title(self):
+        self.ctrl.play()
+        announcements = []
+        ex = MediaExecutor(
+            dry_run=False,
+            player=self.ctrl,
+            before_play=lambda phrase: announcements.append(phrase) or True,
+        )
+
+        result = ex.run(self._decode("next_music"))
+
+        self.assertTrue(result.ok)
+        self.assertNotEqual(result.payload["track"], self.runner.calls[0][-1].split("/")[-1])
+        self.assertEqual(result.detail,
+                         "Skipping to " + Path(result.payload["track"]).stem)
+        self.assertEqual(announcements, [result.detail])
 
     def test_pause_then_stop(self):
         ex = MediaExecutor(dry_run=False, player=self.ctrl)

@@ -71,6 +71,7 @@ REPLY_TEXT = {
     "dim_lights":       "Dimming lights.",
     "set_temperature":  "Setting the temperature.",
     "play_music":       "Playing music.",
+    "next_music":       "Skipping to the next song.",
     "pause_music":      "Music paused.",
     "stop_music":       "Music stopped.",
     # (pause_music / stop_music are now spoken dynamically from the live reply
@@ -89,7 +90,7 @@ REPLY_TEXT = {
     "mute":             "Muting the output.",
     "oov":              "I did not recognise that command.",
 }
-PIPER_ONLY_INTENTS = {"pause_music", "stop_music", "set_timer"}
+PIPER_ONLY_INTENTS = {"pause_music", "stop_music", "set_timer", "next_music"}
 
 # Every intent in config.INTENTS must have a spoken reply WAV. This is the
 # completeness contract that was previously violated (volume_up/down, mute and

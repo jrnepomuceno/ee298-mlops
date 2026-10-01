@@ -13,6 +13,7 @@ MOCK_SLOTS: dict[str, dict[str, Any]] = {
     "dim_lights": {"percent": 40},
     "set_temperature": {"temperature": 22},
     "play_music": {},
+    "next_music": {},
     "pause_music": {},
     "stop_music": {},
     "set_timer": {"duration": 5, "duration_unit": "minute"},

@@ -110,6 +110,8 @@ INTENT_SPECS: dict[str, dict[str, Any]] = {
     # --- media ------------------------------------------------------------ #
     "play_music":  dict(category="media", code="media.play",
                         slots=(), reply="Playing music."),
+    "next_music":  dict(category="media", code="media.next",
+                        slots=(), reply="Skipping to the next song."),
     "pause_music": dict(category="media", code="media.pause",
                         slots=(), reply="Pausing the music."),
     "stop_music":  dict(category="media", code="media.stop",

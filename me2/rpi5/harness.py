@@ -35,6 +35,7 @@ from inference.features import load_wav_mono
 from .replies import build_reply
 from .facade import ActionRequest, RejectResult, decode
 from .orchestrator import Orchestrator, OrchestratorResult, default_orchestrator
+from .v6_adapter import adapt_v6_action_result
 
 
 ACTION_BY_INTENT = {
@@ -43,6 +44,7 @@ ACTION_BY_INTENT = {
     "dim_lights": "lights.dim",
     "set_temperature": "thermostat.set",
     "play_music": "media.play",
+    "next_music": "media.next",
     "pause_music": "media.pause",
     "stop_music": "media.stop",
     "set_timer": "timer.set",
@@ -62,6 +64,8 @@ ACTION_BY_INTENT = {
 class HarnessConfig:
     checkpoint: str = "vcm_model_int8.onnx"
     intent_labels_path: str | None = None
+    enable_v6_actions: bool = False
+    v6_slot_threshold: float = 0.75
     device: str = "cpu"
     max_frames: int = 400
     min_confidence: float = 0.75
@@ -84,6 +88,8 @@ class DryRunDispatcher:
         min_confidence = float(result.get("min_confidence", 0.0))
         slots = result.get("slots") or {}
 
+        if not isinstance(intent, str):
+            return self._rejected("unsupported", "intent_not_allowlisted")
         if intent == "oov":
             return self._rejected("oov", "out_of_vocabulary")
         if confidence < min_confidence:
@@ -169,6 +175,8 @@ class PiHarness:
                  pipeline: FacadePipeline | None = None) -> None:
         self.config = config
         self.device = "cpu"  # ONNX Runtime CPU execution provider
+        if config.enable_v6_actions and not config.intent_labels_path:
+            raise ValueError("v6 actions require --intent-labels contract JSON")
         checkpoint = resolve_checkpoint(config.checkpoint)
         if not checkpoint.exists():
             raise FileNotFoundError(f"checkpoint not found: {checkpoint}")
@@ -177,9 +185,11 @@ class PiHarness:
             str(checkpoint), config.threads)
         outputs = self.session.get_outputs()
         self.diagnostic_contract: dict[str, Any] | None = None
-        self.diagnostic_only = config.intent_labels_path is not None
+        self.v6_actions_enabled = config.enable_v6_actions
+        self.diagnostic_only = (config.intent_labels_path is not None
+                    and not self.v6_actions_enabled)
         self.max_frames = config.max_frames
-        if self.diagnostic_only:
+        if config.intent_labels_path is not None:
             if config.intent_labels_path is None:
                 raise ValueError(
                     "diagnostic ONNX requires --intent-labels contract JSON")
@@ -217,6 +227,9 @@ class PiHarness:
                     self.max_frames = feature_config["max_frames"]
             else:
                 raise ValueError(f"unsupported diagnostic model task: {task!r}")
+            if (self.v6_actions_enabled
+                    and task != "intent_bounded_numeric_slots"):
+                raise ValueError("v6 actions require a bounded-slot model contract")
             self.diagnostic_contract = label_data if isinstance(label_data, dict) else {
                 "task": task, "labels": labels,
             }
@@ -258,7 +271,12 @@ class PiHarness:
             raise RuntimeError("diagnostic-only ONNX model: actions are disabled")
         wav = np.asarray(wav, dtype=np.float32).ravel()
         result = run_utterance(self.session, wav, self.max_frames,
-                               self.intents, self.ctc_vocab)
+                               self.intents, self.ctc_vocab,
+                               diagnostic_contract=self.diagnostic_contract)
+        if self.v6_actions_enabled:
+            result = adapt_v6_action_result(
+                result, self.diagnostic_contract or {},
+                self.config.v6_slot_threshold)
         return self.pipeline.process(result, source=source)
 
     def recognize_self_test(self) -> list[dict[str, Any]]:
@@ -276,6 +294,10 @@ class PiHarness:
         return events
 
     def _event(self, source: str, result: dict[str, Any]) -> dict[str, Any]:
+        if self.v6_actions_enabled:
+            result = adapt_v6_action_result(
+                result, self.diagnostic_contract or {},
+                self.config.v6_slot_threshold)
         result = {**result, "min_confidence": self.config.min_confidence}
         if self.diagnostic_only:
             action = {

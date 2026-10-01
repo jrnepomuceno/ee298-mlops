@@ -45,21 +45,31 @@ class MediaExecutor(Executor):
                 detail="no media player attached", side_effects=False)
         code = req.action_code
         try:
-            if code == "media.play":
+            if code in {"media.play", "media.next"}:
                 announced_before_play = False
                 was_paused = ctrl.is_paused
 
                 def announce_before_start(track_name: str) -> bool:
                     nonlocal announced_before_play
                     if self.before_play is not None:
-                        announced_before_play = bool(self.before_play(track_name))
+                        if code == "media.next":
+                            verb = "Skipping to"
+                        elif was_paused:
+                            verb = "Resuming"
+                        else:
+                            verb = "Playing"
+                        phrase = f"{verb} {Path(track_name).stem}"
+                        announced_before_play = bool(self.before_play(phrase))
                     return announced_before_play
 
-                name = ctrl.play(
-                    before_start=(announce_before_start
-                                  if self.before_play is not None else None))
+                before_start = (announce_before_start
+                        if self.before_play is not None else None)
+                name = (ctrl.next_track(before_start=before_start)
+                    if code == "media.next"
+                    else ctrl.play(before_start=before_start))
                 self._apply_media_volume()
-                verb = "Resuming" if was_paused else "Playing"
+                verb = ("Skipping to" if code == "media.next" else
+                    "Resuming" if was_paused else "Playing")
                 detail = f"{verb} {Path(name).stem}"
             elif code == "media.pause":
                 if ctrl.pause():
@@ -78,7 +88,7 @@ class MediaExecutor(Executor):
                     detail=f"unsupported media action {code}",
                     side_effects=False)
             payload = {"track": ctrl.current_track, "answer": detail}
-            if code == "media.play" and announced_before_play:
+            if code in {"media.play", "media.next"} and announced_before_play:
                 payload["announced_before_play"] = True
             return ExecutionResult(
                 ok=True, intent=req.intent, category=self.category,
