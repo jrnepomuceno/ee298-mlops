@@ -39,7 +39,7 @@ python -m rpi5.run --microphone --wakeword alexa \
 The `v6_15m` export has an intent head and eight bounded slot heads. Its
 contract must be supplied with `--intent-labels`. Without `--enable-v6-actions`,
 the harness stays diagnostics-only. The opt-in demo action mode currently
-allows `PLAY_MUSIC`, `PAUSE`, `STOP`, `VOLUME_UP`, and `VOLUME_DOWN`; other v6 labels, including `NEXT`, are rejected until their runtime mappings are reviewed. Volume thresholds are configurable with `--volume-up-threshold` and `--volume-down-threshold`; the Pi Bash demo starts at 0.90 and 0.60 respectively. When one volume label wins the raw softmax, a qualifying alternative may replace it; if neither clears its threshold, the volume pair is rejected. `--self-test` exercises
+allows `PLAY_MUSIC`, `PAUSE`, `STOP`, `VOLUME_UP`, and `VOLUME_DOWN`; other v6 labels, including `NEXT`, are rejected until their runtime mappings are reviewed. Volume thresholds are configurable with `--volume-up-threshold` and `--volume-down-threshold`; the Pi Bash demo starts at 0.90 and 0.60 respectively. When one volume label wins the raw softmax, a qualifying alternative may replace it; if neither clears its threshold, the volume pair is rejected. Result objects include `volume_intent_scores` with the raw UP/DOWN probabilities. `--self-test` exercises
 loading and routing without live device effects. `--vcm-only` enables the
 microphone pipeline; add `--live-media` to control actual playback.
 

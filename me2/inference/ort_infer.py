@@ -94,6 +94,15 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     return e / np.sum(e)
 
 
+def _volume_intent_scores(probs: np.ndarray,
+                          intents: list[str]) -> dict[str, float]:
+    return {
+        label.lower(): round(float(probs[index]), 4)
+        for index, label in enumerate(intents)
+        if label.lower() in {"volume_up", "volume_down"}
+    }
+
+
 def _select_intent(probs: np.ndarray, intents: list[str],
                    thresholds: dict[str, float] | None
                    ) -> tuple[str, float, str | None]:
@@ -219,6 +228,9 @@ def run_utterance(session, wav: np.ndarray, max_frames: int | None,
             "latency_ms": round(latency_ms, 2),
             "backend": "intent_bounded_numeric_slots",
         }
+        volume_scores = _volume_intent_scores(probs, intents)
+        if volume_scores:
+            result["volume_intent_scores"] = volume_scores
         if adjusted_from is not None:
             result["pre_threshold_intent"] = adjusted_from
         return result
@@ -239,6 +251,9 @@ def run_utterance(session, wav: np.ndarray, max_frames: int | None,
             "latency_ms": round(latency_ms, 2),
             "backend": "intent_only",
         }
+        volume_scores = _volume_intent_scores(probs, intents)
+        if volume_scores:
+            result["volume_intent_scores"] = volume_scores
         if adjusted_from is not None:
             result["pre_threshold_intent"] = adjusted_from
         return result
@@ -260,6 +275,9 @@ def run_utterance(session, wav: np.ndarray, max_frames: int | None,
         "frames": int(mel.shape[0]),
         "latency_ms": round(latency_ms, 2),
     }
+    volume_scores = _volume_intent_scores(probs, intents)
+    if volume_scores:
+        result["volume_intent_scores"] = volume_scores
     if adjusted_from is not None:
         result["pre_threshold_intent"] = adjusted_from
     return result

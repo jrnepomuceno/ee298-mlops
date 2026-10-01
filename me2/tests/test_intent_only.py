@@ -68,6 +68,10 @@ class IntentOnlyInferenceTests(unittest.TestCase):
         self.assertEqual(result["intent"], "volume_down")
         self.assertEqual(result["pre_threshold_intent"], "volume_up")
         self.assertAlmostEqual(result["intent_confidence"], 0.2447, places=3)
+        self.assertAlmostEqual(
+            result["volume_intent_scores"]["volume_up"], 0.6652, places=3)
+        self.assertAlmostEqual(
+            result["volume_intent_scores"]["volume_down"], 0.2447, places=3)
 
     def test_volume_thresholds_accept_uppercase_v6_labels(self):
         with mock.patch("inference.ort_infer.kaldi_fbank",
