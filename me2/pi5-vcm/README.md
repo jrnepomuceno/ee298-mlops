@@ -45,8 +45,11 @@ The original training rows alone determine the 10% validation split; the
 speaker-grouped greedy algorithm uses seed 42 and requires validation coverage of
 every class present in the source train set. Synthetic training negatives are added
 only when every `source_files` entry resolves to an original training row assigned
-to the training portion. Exclusion counts and reasons, class counts, row IDs,
-speaker IDs, manifest hashes, and the split-manifest hash are recorded. The
+to the training portion. Original rows missing `speaker_id` are conservatively
+kept together as one unknown-speaker group; negatives referring to them are
+excluded because their speaker provenance cannot be established. Exclusion counts
+and reasons, class counts, row IDs, speaker groups, manifest hashes, and the
+split-manifest hash are recorded. The
 `tune_oos` data remains outside the supervised manifests for its separate
 threshold-tuning role.
 
@@ -106,3 +109,9 @@ numerals_loader = create_numerals_dataloader(
     dataset_dir="/path/printed/by/pi5-vcm-download-data",
 )
 ```
+
+The pinned snapshot was checked across all 66,390 numerals rows: all decode as
+16 kHz mono finite audio, but 100 clips are shorter than 0.5 seconds. Per the plan's
+fallback, treat Phase 1 pretraining as unavailable for this snapshot and train
+Phase 2 from random initialization. The numerals loader rejects those short clips
+rather than silently admitting them into Phase 1.

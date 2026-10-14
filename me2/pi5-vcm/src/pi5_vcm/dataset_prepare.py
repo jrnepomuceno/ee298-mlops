@@ -50,6 +50,7 @@ SLOT_INTENTS = (
 )
 SPLIT_SEED = 42
 VALIDATION_FRACTION = 0.10
+UNKNOWN_SPEAKER_GROUP = "__UNKNOWN_SPEAKER__"
 BASE_SOURCE_COLUMNS = [
     "file",
     "command",
@@ -223,9 +224,8 @@ def grouped_stratified_split(
     rows_by_speaker: dict[str, list[SourceRecord]] = defaultdict(list)
     source_counts: Counter[int] = Counter()
     for record in records:
-        if record.speaker_id is None:
-            raise ValueError(f"{record.clip_id}: original train row has no speaker_id")
-        rows_by_speaker[record.speaker_id].append(record)
+        speaker_group = record.speaker_id or UNKNOWN_SPEAKER_GROUP
+        rows_by_speaker[speaker_group].append(record)
         source_counts[record.intent_id] += 1
 
     speakers = sorted(rows_by_speaker)
@@ -480,11 +480,19 @@ def prepare_dataset(
                 len(validation_records) / len(original_records)
             ),
             "validation_speakers": sorted(validation_speakers),
+            "missing_speaker_rows": sum(
+                record.speaker_id is None for record in original_records
+            ),
+            "unknown_speaker_policy": (
+                "Rows without speaker_id are grouped together; synthetic negatives "
+                "referencing them are excluded because speaker provenance is unknown."
+            ),
             "train_original_speakers": sorted(
                 {
                     record.speaker_id
                     for record in train_records
                     if not record.is_synthetic_negative
+                    and record.speaker_id is not None
                 }
             ),
             "validation_row_ids": [record.row_id for record in validation_records],

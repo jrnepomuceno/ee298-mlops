@@ -27,7 +27,7 @@ from pi5_vcm.dataset import ParquetAudioDataset, ParquetNumeralsDataset
 
 
 def source_record(
-    clip_id: str, speaker_id: str, intent_id: int
+    clip_id: str, speaker_id: str | None, intent_id: int
 ) -> SourceRecord:
     return SourceRecord(
         clip_id=clip_id,
@@ -67,6 +67,26 @@ class GroupedSplitTests(unittest.TestCase):
             & {row.speaker_id for row in validation_a}
         )
         self.assertEqual({row.intent_id for row in validation_a}, {0, 1})
+
+    def test_missing_speaker_rows_stay_in_one_conservative_group(self) -> None:
+        records = [
+            source_record("unknown-a", None, 0),
+            source_record("unknown-b", None, 1),
+            source_record("speaker-a-0", "speaker-a", 0),
+            source_record("speaker-a-1", "speaker-a", 1),
+            source_record("speaker-b-0", "speaker-b", 0),
+            source_record("speaker-b-1", "speaker-b", 1),
+        ]
+        train_records, validation_records, _ = grouped_stratified_split(
+            records, val_fraction=0.5, seed=42
+        )
+
+        train_ids = {record.clip_id for record in train_records}
+        validation_ids = {record.clip_id for record in validation_records}
+        unknown_ids = {"unknown-a", "unknown-b"}
+        self.assertTrue(
+            unknown_ids.issubset(train_ids) or unknown_ids.issubset(validation_ids)
+        )
 
 
 class SyntheticNegativeProvenanceTests(unittest.TestCase):
