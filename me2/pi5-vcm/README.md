@@ -115,3 +115,20 @@ The pinned snapshot was checked across all 66,390 numerals rows: all decode as
 fallback, treat Phase 1 pretraining as unavailable for this snapshot and train
 Phase 2 from random initialization. The numerals loader rejects those short clips
 rather than silently admitting them into Phase 1.
+
+## ME2 model
+
+`pi5_vcm.model.ME2Model` implements the plan's 20-intent and six-slot output
+contract. It accepts normalized 80-bin log-mel features with shape
+`[batch, frames, 80]` and an optional valid-frame mask, and returns intent logits
+`[batch, 20]` and slot logits `[batch, 6, 3]`. Its 256-channel causal DS-CNN
+produces frame-aligned features and has approximately one million parameters,
+including the output heads. The encoder can be frozen for Stage A and unfrozen
+for Stage B with `set_encoder_trainable`.
+
+`pi5_vcm.loss.multitask_loss` computes intent cross-entropy plus the six masked
+slot losses; each slot loss is restricted to examples of its corresponding
+intent. Use `inverse_frequency_class_weights` to construct the Stage A/B
+class-balanced intent weights. The waveform loader above is not a log-mel
+frontend: waveform-to-feature extraction and the training loop are separate
+steps and must supply these model inputs.
