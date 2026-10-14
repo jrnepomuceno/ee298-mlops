@@ -1,0 +1,25 @@
+[project]
+name = "pi5-vcm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "OnIt", email = "onit@localhost" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub>=0.26,<2",
+    "numpy>=1.26,<3",
+    "pyarrow>=18,<27",
+    "soundfile>=0.12,<1",
+    "torch>=2.5,<3",
+]
+
+[project.scripts]
+pi5-vcm = "pi5_vcm:main"
+pi5-vcm-download-data = "pi5_vcm.dataset_source:main"
+pi5-vcm-prepare-data = "pi5_vcm.dataset_prepare:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
