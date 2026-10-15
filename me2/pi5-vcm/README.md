@@ -129,6 +129,86 @@ for Stage B with `set_encoder_trainable`.
 `pi5_vcm.loss.multitask_loss` computes intent cross-entropy plus the six masked
 slot losses; each slot loss is restricted to examples of its corresponding
 intent. Use `inverse_frequency_class_weights` to construct the Stage A/B
-class-balanced intent weights. The waveform loader above is not a log-mel
-frontend: waveform-to-feature extraction and the training loop are separate
-steps and must supply these model inputs.
+class-balanced intent weights.
+
+## Train the model
+
+The training command connects the waveform batches directly to
+`LogMelFrontend`, which computes causal 80-bin log-mel features using a 25 ms
+window and 10 ms hop. It fits per-bin mean/std statistics on the training
+manifest only and saves them as `checkpoints/mel_stats.npz`; the same stats are
+stored in the final checkpoint and can be reused during inference.
+
+```bash
+uv run pi5-vcm-train \
+  --train-manifest data/processed/train.jsonl \
+  --validation-manifest data/processed/validation.jsonl \
+  --dataset-dir /path/printed/by/pi5-vcm-download-data \
+  --output-dir checkpoints \
+  --batch-size 32 \
+  --device auto
+```
+
+`--device auto` selects CUDA when available and otherwise uses CPU. Use
+`--device cuda:0` to select a specific NVIDIA GPU. CUDA training automatically
+uses FP16 mixed precision with gradient scaling; override with
+`--precision fp32`, `--precision fp16`, or (on supported NVIDIA GPUs)
+`--precision bf16`. CPU uses FP32 by default. Reduce `--batch-size` if a GPU
+runs out of memory. For an NVIDIA GPU, install the project on Linux with the
+locked environment (`uv sync --frozen`) and verify that `nvidia-smi` works and
+that PyTorch reports CUDA available before starting a long run:
+
+```bash
+nvidia-smi
+uv run python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+```
+
+Run the same command on either a 3060 Ti or A100 host; `auto` selects its
+available CUDA device without a hardware-specific code change.
+
+Training follows the plan's two stages: three frozen-encoder head-training
+epochs at `1e-3`, followed by up to five full-model epochs with encoder LR
+`1e-4` and head LR `1e-3`. Stage B early stopping uses validation intent
+Macro-F1 with patience three; the best Stage B model is saved to
+`checkpoints/me2_model.pt`. Intent loss uses inverse-frequency class weights;
+slot losses use only examples matching each slot's intent and enabled mask.
+The checkpoint and `checkpoints/training_run.json` record seed, deterministic
+algorithm settings, device/GPU and precision, source file hashes, manifest
+SHA-256 hashes, package/platform versions, class counts, and training settings.
+Deterministic algorithms are enabled by default; use `--non-deterministic` only
+when you explicitly prefer speed. Repeated runs on the same device, software,
+and data are intended to be deterministic; different GPU models or precisions
+can still produce numerically different results.
+
+For a bounded, class-balanced GPU smoke test (four examples per class; one epoch
+per stage, not a full training run), use `python training/run_metric_smoke.py`
+with the same three dataset arguments. The Markdown metrics report and complete
+run metadata are written under `training/reports/`.
+
+Phase 1 pretraining remains skipped for this dataset snapshot, so the encoder
+starts from random initialization. Because the plan's numerals corpus is not
+being used, the frontend statistics are computed from the supervised training
+manifest (never validation, test, or holdout) and must be kept with the model.
+
+## Export ONNX candidates
+
+After full supervised training, export FP32, FP16, and static QDQ INT8 candidates
+and evaluate them on the complete validation and `tune_oos` manifests:
+
+```bash
+uv run pi5-vcm-export \
+  --checkpoint checkpoints/me2_model.pt \
+  --train-manifest data/processed/train.jsonl \
+  --validation-manifest data/processed/validation.jsonl \
+  --tune-oos-manifest data/processed/tune_oos.jsonl \
+  --dataset-dir /path/printed/by/pi5-vcm-download-data \
+  --output-dir models
+```
+
+The INT8 calibration reader selects a deterministic 128-clip subset from the
+training manifest only. `models/export_report.json` records the calibration
+clip IDs and hash, model hashes and sizes, validation agreement/probability
+error, slot accuracy, and the separately tuned OOS threshold for each candidate.
+The command does not promote a candidate to `models/model.onnx`: deployment
+selection also requires the plan's ONNX Runtime provider/graph checks and RPi4
+end-to-end latency gate. Keep `test` and `holdout` out of export selection.

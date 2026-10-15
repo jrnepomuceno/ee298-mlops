@@ -1,0 +1,162 @@
+{
+  "checkpoint": "training\\reports\\3060ti-smoke-artifacts\\me2_model.pt",
+  "mel_statistics": "training\\reports\\3060ti-smoke-artifacts\\mel_stats.npz",
+  "best_stage_b_epoch": 1,
+  "best_validation_macro_f1": 0.025174826383590698,
+  "epochs_completed": 2,
+  "history": [
+    {
+      "stage": "A",
+      "epoch": 1,
+      "train": {
+        "loss": 10.680502891540527,
+        "intent_loss": 4.434805774688721,
+        "slot_loss": 6.245697021484375,
+        "macro_f1": 0.004761904943734407
+      },
+      "validation": {
+        "loss": 6.803215599060058,
+        "intent_loss": 4.1456372261047365,
+        "slot_loss": 2.657578468322754,
+        "macro_f1": 0.004761904943734407
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 1,
+      "train": {
+        "loss": 10.695419979095458,
+        "intent_loss": 3.909867191314697,
+        "slot_loss": 6.785552978515625,
+        "macro_f1": 0.009000000543892384
+      },
+      "validation": {
+        "loss": 6.521338176727295,
+        "intent_loss": 3.25126314163208,
+        "slot_loss": 3.2700748443603516,
+        "macro_f1": 0.025174826383590698
+      }
+    }
+  ],
+  "run_metadata": {
+    "seed": 42,
+    "deterministic_algorithms": true,
+    "cublas_workspace_config": ":4096:8",
+    "device": "cuda:0",
+    "device_name": "NVIDIA GeForce RTX 3060 Ti",
+    "precision": "fp16",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "torch_version": "2.6.0+cu124",
+    "numpy_version": "2.5.3",
+    "cuda_version": "12.4",
+    "dataset_revision": "bfca0bbebfe17e00d6a685d1da573615d29ecdce",
+    "intent_names": [
+      "PLAY_MUSIC",
+      "WEATHER",
+      "TIME",
+      "LIGHT_ON",
+      "LIGHT_OFF",
+      "PAUSE",
+      "STOP",
+      "NEXT",
+      "VOLUME_UP",
+      "VOLUME_DOWN",
+      "CALL",
+      "MESSAGE",
+      "LIST_REMINDERS",
+      "TIMER",
+      "ALARM",
+      "TEMPERATURE",
+      "BRIGHTNESS",
+      "COLOR",
+      "CREATE_REMINDER",
+      "OUT_OF_SCOPE"
+    ],
+    "slot_names": [
+      "TIMER",
+      "ALARM",
+      "TEMPERATURE",
+      "BRIGHTNESS",
+      "COLOR",
+      "CREATE_REMINDER"
+    ],
+    "model_parameters": 994854,
+    "feature_config": {
+      "sample_rate": 16000,
+      "mel_bins": 80,
+      "frame_length_samples": 400,
+      "frame_hop_samples": 160,
+      "fft_size": 400
+    },
+    "git_revision": null,
+    "git_worktree_dirty": null,
+    "source_sha256": {
+      "src\\pi5_vcm\\dataset.py": "7a405a86ff42b847f43f0c56d8e03dceea44c9a67de60cbf8c8e138c0630d58e",
+      "src\\pi5_vcm\\dataset_prepare.py": "ec828fe2a0b9de41f29058b0a3438749dce02bb5080097994add2a466e20fe8f",
+      "src\\pi5_vcm\\dataset_source.py": "401868c6af930a0a3c1e7427246437965135c622bff8276fc35c7e2199aee721",
+      "src\\pi5_vcm\\features.py": "34f25e5e0980cf20511fbf1a82382d506a11bc8d3b4ada2fe60c8641194e0d08",
+      "src\\pi5_vcm\\loss.py": "59af79b2214527e136e82f7e246334bbd6e4f60159f9002610f7adb9ca5ad0b7",
+      "src\\pi5_vcm\\model.py": "34f71141aca7e5085e9e37434e69ee5db506b25b8d97b41c88d9180c08c33f88",
+      "src\\pi5_vcm\\training.py": "28a43c958a5c45c770c4e54fd495eb8b97122622fd66567a7076f580a75c20e8",
+      "training\\run_metric_smoke.py": "34babab3b8a7e4b21ac8c7aa2c3436312b23a759caa3b43f7e5f3bb0e8325834",
+      "pyproject.toml": "b8630d632702d7498c0de6f4ad24eb4a561a9920b1dbbba8a131b9c38aca51c6",
+      "uv.lock": "5d789f9493037676e74372f41508366fcd3d065752f834099e56b82dcef2c3c9"
+    },
+    "train_manifest": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\train.jsonl",
+      "sha256": "52fed9b996bbe480410e0ba3c03b6d8d64b6376162b62be7b050ca167848f8bb"
+    },
+    "validation_manifest": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\validation.jsonl",
+      "sha256": "a9401762818751523740f01f7eb8025c30660719f754509d7909b34804b36e9a"
+    },
+    "class_counts": [
+      288,
+      303,
+      306,
+      305,
+      296,
+      303,
+      293,
+      298,
+      283,
+      278,
+      308,
+      304,
+      304,
+      945,
+      887,
+      954,
+      938,
+      949,
+      942,
+      569
+    ],
+    "training": {
+      "stage_a_epochs": 1,
+      "stage_a_learning_rate": 0.001,
+      "stage_b_epochs": 1,
+      "stage_b_encoder_learning_rate": 0.0001,
+      "stage_b_head_learning_rate": 0.001,
+      "early_stopping_patience": 1,
+      "batch_size": 16,
+      "num_workers": 0,
+      "drop_last": false,
+      "shuffle": true
+    },
+    "gpu_properties": {
+      "name": "NVIDIA GeForce RTX 3060 Ti",
+      "compute_capability": [
+        8,
+        6
+      ],
+      "total_memory_bytes": 8589410304
+    },
+    "mel_statistics_source": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\train.jsonl",
+      "sha256": "52fed9b996bbe480410e0ba3c03b6d8d64b6376162b62be7b050ca167848f8bb"
+    }
+  },
+  "run_report": "training\\reports\\3060ti-smoke-artifacts\\training_run.json"
+}

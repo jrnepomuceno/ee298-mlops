@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -350,6 +351,9 @@ def create_dataloader(
     num_workers: int = 0,
     drop_last: bool = False,
     dataset_dir: str | Path | None = None,
+    generator: torch.Generator | None = None,
+    pin_memory: bool = False,
+    worker_init_fn: Callable[[int], None] | None = None,
 ) -> DataLoader[dict[str, Any]]:
     """Create a PyTorch DataLoader for a prepared JSONL manifest."""
     if batch_size < 1:
@@ -364,6 +368,9 @@ def create_dataloader(
         num_workers=num_workers,
         drop_last=drop_last,
         collate_fn=collate_audio,
+        generator=generator,
+        pin_memory=pin_memory,
+        worker_init_fn=worker_init_fn,
     )
 
 

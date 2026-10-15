@@ -1,0 +1,258 @@
+{
+  "checkpoint": "training\\reports\\full-run-artifacts\\me2_model.pt",
+  "mel_statistics": "training\\reports\\full-run-artifacts\\mel_stats.npz",
+  "best_stage_b_epoch": 4,
+  "best_validation_macro_f1": 0.4163418710231781,
+  "epochs_completed": 8,
+  "history": [
+    {
+      "stage": "A",
+      "epoch": 1,
+      "train": {
+        "loss": 9.902358784623896,
+        "intent_loss": 2.8788176036338764,
+        "slot_loss": 7.02354119996295,
+        "macro_f1": 0.10874788463115692
+      },
+      "validation": {
+        "loss": 3.9512942791873074,
+        "intent_loss": 3.226577222458255,
+        "slot_loss": 0.724717067384631,
+        "macro_f1": 0.0659206286072731
+      }
+    },
+    {
+      "stage": "A",
+      "epoch": 2,
+      "train": {
+        "loss": 9.357996415774123,
+        "intent_loss": 2.5800133615207472,
+        "slot_loss": 6.777983041351783,
+        "macro_f1": 0.17566102743148804
+      },
+      "validation": {
+        "loss": 3.807751291512999,
+        "intent_loss": 3.1301643719664276,
+        "slot_loss": 0.6775869302021502,
+        "macro_f1": 0.13372080028057098
+      }
+    },
+    {
+      "stage": "A",
+      "epoch": 3,
+      "train": {
+        "loss": 9.09297786270767,
+        "intent_loss": 2.4399040973590855,
+        "slot_loss": 6.65307379342852,
+        "macro_f1": 0.2267874777317047
+      },
+      "validation": {
+        "loss": 3.8631853369139204,
+        "intent_loss": 3.0834636488440315,
+        "slot_loss": 0.7797217200366257,
+        "macro_f1": 0.149691641330719
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 1,
+      "train": {
+        "loss": 8.39257220058409,
+        "intent_loss": 2.222803397284424,
+        "slot_loss": 6.169768795331034,
+        "macro_f1": 0.2882043421268463
+      },
+      "validation": {
+        "loss": 3.7444066091178736,
+        "intent_loss": 3.182110887222006,
+        "slot_loss": 0.5622957165680784,
+        "macro_f1": 0.2551552951335907
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 2,
+      "train": {
+        "loss": 6.335552084070052,
+        "intent_loss": 1.8513719956340997,
+        "slot_loss": 4.484180078949487,
+        "macro_f1": 0.40005365014076233
+      },
+      "validation": {
+        "loss": 3.5427510438684644,
+        "intent_loss": 2.9130647868417494,
+        "slot_loss": 0.6296862317197149,
+        "macro_f1": 0.3094860017299652
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 3,
+      "train": {
+        "loss": 5.091368955556971,
+        "intent_loss": 1.5886642388428052,
+        "slot_loss": 3.5027047019449262,
+        "macro_f1": 0.49693208932876587
+      },
+      "validation": {
+        "loss": 3.5739692491748034,
+        "intent_loss": 3.1937953866393873,
+        "slot_loss": 0.38017384877196014,
+        "macro_f1": 0.337396502494812
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 4,
+      "train": {
+        "loss": 4.099745780926231,
+        "intent_loss": 1.4144501598820713,
+        "slot_loss": 2.6852956200955127,
+        "macro_f1": 0.5603706240653992
+      },
+      "validation": {
+        "loss": 3.5792711225079867,
+        "intent_loss": 3.2617910263480643,
+        "slot_loss": 0.31748009283005413,
+        "macro_f1": 0.4163418710231781
+      }
+    },
+    {
+      "stage": "B",
+      "epoch": 5,
+      "train": {
+        "loss": 3.1280222772235695,
+        "intent_loss": 1.2488796960699207,
+        "slot_loss": 1.8791425903080874,
+        "macro_f1": 0.6057368516921997
+      },
+      "validation": {
+        "loss": 3.4305060762266875,
+        "intent_loss": 3.103658639296917,
+        "slot_loss": 0.32684743448786674,
+        "macro_f1": 0.3981262743473053
+      }
+    }
+  ],
+  "run_metadata": {
+    "seed": 42,
+    "deterministic_algorithms": true,
+    "cublas_workspace_config": ":4096:8",
+    "device": "cuda:0",
+    "device_name": "NVIDIA GeForce RTX 3060 Ti",
+    "precision": "fp16",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "torch_version": "2.6.0+cu124",
+    "numpy_version": "2.5.3",
+    "cuda_version": "12.4",
+    "dataset_revision": "bfca0bbebfe17e00d6a685d1da573615d29ecdce",
+    "intent_names": [
+      "PLAY_MUSIC",
+      "WEATHER",
+      "TIME",
+      "LIGHT_ON",
+      "LIGHT_OFF",
+      "PAUSE",
+      "STOP",
+      "NEXT",
+      "VOLUME_UP",
+      "VOLUME_DOWN",
+      "CALL",
+      "MESSAGE",
+      "LIST_REMINDERS",
+      "TIMER",
+      "ALARM",
+      "TEMPERATURE",
+      "BRIGHTNESS",
+      "COLOR",
+      "CREATE_REMINDER",
+      "OUT_OF_SCOPE"
+    ],
+    "slot_names": [
+      "TIMER",
+      "ALARM",
+      "TEMPERATURE",
+      "BRIGHTNESS",
+      "COLOR",
+      "CREATE_REMINDER"
+    ],
+    "model_parameters": 994854,
+    "feature_config": {
+      "sample_rate": 16000,
+      "mel_bins": 80,
+      "frame_length_samples": 400,
+      "frame_hop_samples": 160,
+      "fft_size": 400
+    },
+    "git_revision": null,
+    "git_worktree_dirty": null,
+    "source_sha256": {
+      "src\\pi5_vcm\\dataset.py": "7a405a86ff42b847f43f0c56d8e03dceea44c9a67de60cbf8c8e138c0630d58e",
+      "src\\pi5_vcm\\dataset_prepare.py": "ec828fe2a0b9de41f29058b0a3438749dce02bb5080097994add2a466e20fe8f",
+      "src\\pi5_vcm\\dataset_source.py": "401868c6af930a0a3c1e7427246437965135c622bff8276fc35c7e2199aee721",
+      "src\\pi5_vcm\\features.py": "34f25e5e0980cf20511fbf1a82382d506a11bc8d3b4ada2fe60c8641194e0d08",
+      "src\\pi5_vcm\\loss.py": "59af79b2214527e136e82f7e246334bbd6e4f60159f9002610f7adb9ca5ad0b7",
+      "src\\pi5_vcm\\model.py": "34f71141aca7e5085e9e37434e69ee5db506b25b8d97b41c88d9180c08c33f88",
+      "src\\pi5_vcm\\training.py": "28a43c958a5c45c770c4e54fd495eb8b97122622fd66567a7076f580a75c20e8",
+      "training\\run_metric_smoke.py": "34babab3b8a7e4b21ac8c7aa2c3436312b23a759caa3b43f7e5f3bb0e8325834",
+      "pyproject.toml": "e8bd234502585a03a79a0c2784745c4d3b9a1ec426578050b84f98edc97edd3f",
+      "uv.lock": "6d0c7d04914ebb4208b5182846fbfe45302b8aab3e57f100e79ca404991f3eb1"
+    },
+    "train_manifest": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\train.jsonl",
+      "sha256": "52fed9b996bbe480410e0ba3c03b6d8d64b6376162b62be7b050ca167848f8bb"
+    },
+    "validation_manifest": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\validation.jsonl",
+      "sha256": "a9401762818751523740f01f7eb8025c30660719f754509d7909b34804b36e9a"
+    },
+    "class_counts": [
+      288,
+      303,
+      306,
+      305,
+      296,
+      303,
+      293,
+      298,
+      283,
+      278,
+      308,
+      304,
+      304,
+      945,
+      887,
+      954,
+      938,
+      949,
+      942,
+      569
+    ],
+    "training": {
+      "stage_a_epochs": 3,
+      "stage_a_learning_rate": 0.001,
+      "stage_b_epochs": 5,
+      "stage_b_encoder_learning_rate": 0.0001,
+      "stage_b_head_learning_rate": 0.001,
+      "early_stopping_patience": 3,
+      "batch_size": 32,
+      "num_workers": 0,
+      "drop_last": false,
+      "shuffle": true
+    },
+    "gpu_properties": {
+      "name": "NVIDIA GeForce RTX 3060 Ti",
+      "compute_capability": [
+        8,
+        6
+      ],
+      "total_memory_bytes": 8589410304
+    },
+    "mel_statistics_source": {
+      "path": "C:\\Users\\jdrne\\me2_3060ti_run_20261015\\data\\processed\\train.jsonl",
+      "sha256": "52fed9b996bbe480410e0ba3c03b6d8d64b6376162b62be7b050ca167848f8bb"
+    }
+  },
+  "run_report": "training\\full-run-artifacts\\training_run.json"
+}
