@@ -1,0 +1,16 @@
+{
+	"mcpServers": {
+		"onit": {
+			"type": "stdio",
+			"command": "/Users/jovendanielnepomuceno/MyPlayground/OnIt-jrnepomuceno/onit/.venv-mcp/bin/python",
+			"args": [
+				"/Users/jovendanielnepomuceno/sandbox/onit_mcp_bridge.py"
+			],
+			"env": {
+				"ONIT_CONFIG": "/Users/jovendanielnepomuceno/.onit/config.yaml",
+				"ONIT_DATA": "/Users/jovendanielnepomuceno/sandbox",
+				"ONIT_SOURCE": "/Users/jovendanielnepomuceno/MyPlayground/OnIt-jrnepomuceno/onit"
+			}
+		}
+	}
+}
