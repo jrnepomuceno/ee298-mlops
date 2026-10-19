@@ -78,8 +78,8 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `mel_features`, boolean `frame_mask`, 20 intent probabilities, and six
   3-class slot heads. The frontend computes 80-bin log-mel features and applies
   paired training statistics.
-- Added local action dispatch for time, optional GPIO light control, and
-  `playerctl` media actions. Unsupported integrations report `unavailable`;
+- Added local action dispatch for time, local music controls, optional GPIO
+  light control, and weather. Unsupported integrations report `unavailable`;
   out-of-scope predictions are rejected.
 - Implemented current WEATHER responses for Quezon City, Philippines, using
   OpenWeather Current Weather API and `OPENWEATHER_API_KEY`. The provider
@@ -98,8 +98,18 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `--dummy-time` and `--dummy-intent INTENT` modes are opt-in and bypass
   inference; they do not use a fabricated ONNX model. The service installer can
   persist either test mode. The Pi service is currently set to persistent
-  `--dummy-intent WEATHER`, which dispatches WEATHER for every voiced command
-  after Alexa, regardless of the command's words.
+  `--dummy-intent PLAY_MUSIC`, which dispatches PLAY_MUSIC for every voiced
+  command after Alexa, regardless of the command's words.
+- Implemented local music playback from `~/Music` with a supervised `ffplay`
+  process. The runner recursively scans supported audio files in
+  case-insensitive path order; Play resumes a paused track, Pause suspends it,
+  Stop terminates playback, and Next advances and wraps. The collection is
+  rescanned on each play/next action. The Pi has three MP3 files, and a direct
+  smoke test of Play, Pause, Resume, Next, and Stop passed.
+- Implemented Volume Up/Down through `wpctl` against the default PipeWire
+  output, in 5% steps capped at 100%. Per the selected behavior, this changes
+  both music and Piper speech volume. Both actions passed a direct Pi smoke
+  test; the original output level (0.80) was restored afterwards.
 - Loaded Piper's voice once and reused it for replies. Added silent startup
   warmup for the wake-word model and Piper synthesis.
 - Added per-interaction timing logs for command capture, intent execution,
@@ -110,7 +120,7 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   spoken reply plays, then off. The existing optional GPIO indicator remains
   available separately.
 - Deployed the runner and QuadcastRGB foreground executable to the Raspberry
-  Pi 5. The systemd user service was verified active in persistent WEATHER mode
+  Pi 5. The systemd user service was verified active in persistent PLAY_MUSIC mode
   with DuoCast audio capture running.
 - One live wake-to-spoken-WEATHER interaction completed successfully on the
   Pi. Its measured durations were: command capture 4,181 ms (includes the
@@ -119,7 +129,7 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   acknowledgement through playback completion. These are one-interaction
   measurements, not latency percentiles. Playback duration measures the whole
   spoken response, not time to first audible output.
-- Focused wake-runner and intent-execution tests: 58 passed. Python compilation,
+- Focused wake-runner and intent-execution tests: 57 passed. Python compilation,
   installer shell syntax, and `git diff --check` passed.
 
 ### Not yet verified or completed
@@ -131,18 +141,14 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `LIST_REMINDERS`, `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, `COLOR`, and
   `CREATE_REMINDER`; their service or hardware adapters are not configured.
   `OUT_OF_SCOPE` is rejected by design.
-- `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin, and media intents
-  (`PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT`, `VOLUME_UP`, `VOLUME_DOWN`) require a
-  working `playerctl` target. Their real-device behavior has not been validated
-  on the Pi in this progress update.
-- Persistent `--dummy-intent WEATHER` is a test/demo mode, not model-routed
-  inference: it dispatches WEATHER after every voiced command regardless of
-  what was said. Real ME2 inference remains blocked on a compatible exported
+- `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin; their real-device
+  behavior has not been validated on the Pi in this progress update.
+- Persistent `--dummy-intent PLAY_MUSIC` is a test/demo mode, not model-routed
+  inference: it dispatches PLAY_MUSIC after every voiced command regardless
+  of what was said. Real ME2 inference remains blocked on a compatible exported
   model and its paired `mel_stats.npz`.
 - One live WEATHER interaction has been timed, but latency percentiles and the
   Phase 1 benchmark requirements have not been measured.
-- End-to-end latency percentiles and the Phase 1 benchmark requirements have
-  not been measured.
 
 ## Original dataset-pipeline follow-ups
 

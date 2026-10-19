@@ -227,8 +227,8 @@ The currently implemented local actions are:
 
 | Intent(s) | Action |
 | --- | --- |
-| `PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT` | Run the matching `playerctl` command. |
-| `VOLUME_UP`, `VOLUME_DOWN` | Adjust the active player's volume by 5% with `playerctl`. |
+| `PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT` | Play supported files recursively from `~/Music` with `ffplay`; tracks are ordered by path, and `NEXT` advances and wraps. |
+| `VOLUME_UP`, `VOLUME_DOWN` | Adjust the default PipeWire output by 5%, capped at 100%; this affects music and Piper speech. |
 | `TIME` | Speak the Pi's local system time using Piper TTS. |
 | `WEATHER` | Speak current conditions in Quezon City using OpenWeather Current Weather API. |
 | `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
@@ -269,11 +269,22 @@ weather configuration is unavailable. The dummy intent setting makes the
 Pi speak live WEATHER after every voiced command; change the installer mode
 explicitly when switching to another intent or back to normal inference.
 
-Install `playerctl` on the Pi to use media controls. For light control, wire
-the selected BCM GPIO to a suitable relay/driver and configure its pin, for
-example `PI5_VCM_LIGHT_GPIO=17`. Do not connect a relay coil or other high-load
-device directly to a Raspberry Pi GPIO. GPIO actions require `gpiozero`, which
-is supplied by the Raspberry Pi OS packages installed by `setup_pi.sh`.
+The local music player uses `ffplay` from FFmpeg and scans `~/Music`
+recursively for AAC, AIFF, FLAC, M4A, MP3, Ogg, Opus, and WAV files. Tracks
+are played in case-insensitive path order; `NEXT` wraps to the first track.
+The collection is rescanned for each play or next action, so added or removed
+files are picked up without restarting the service.
+`PLAY_MUSIC` resumes a paused track, `PAUSE` pauses the current process,
+`STOP` terminates it, and `NEXT` starts the following track. The process is
+stopped when the inference service exits. Volume intents use PipeWire's
+`wpctl` to adjust the default output in 5% steps, affecting all output
+including spoken replies; adjustments are capped at 100%.
+
+For light control, wire the selected BCM GPIO to a suitable relay/driver and
+configure its pin, for example `PI5_VCM_LIGHT_GPIO=17`. Do not connect a relay
+coil or other high-load device directly to a Raspberry Pi GPIO. GPIO actions
+require `gpiozero`, which is supplied by the Raspberry Pi OS packages
+installed by `setup_pi.sh`.
 
 Telephony, messaging, reminders, timers, alarms, temperature, brightness, and
 color actions return `unavailable` until their corresponding service or

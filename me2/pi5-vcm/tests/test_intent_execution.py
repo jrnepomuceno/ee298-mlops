@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
@@ -16,9 +17,37 @@ def test_dispatcher_covers_all_model_intents(
 ) -> None:
     monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
     monkeypatch.setattr(
-        execution.IntentDispatcher,
-        "_player_action",
-        lambda self, intent, *args: execution.ExecutionResult(
+        execution.LocalMusicPlayer,
+        "play",
+        lambda self: execution.ExecutionResult(
+            "PLAY_MUSIC", execution.ExecutionStatus.COMPLETED, "test action"
+        ),
+    )
+    monkeypatch.setattr(
+        execution.LocalMusicPlayer,
+        "pause",
+        lambda self: execution.ExecutionResult(
+            "PAUSE", execution.ExecutionStatus.COMPLETED, "test action"
+        ),
+    )
+    monkeypatch.setattr(
+        execution.LocalMusicPlayer,
+        "stop",
+        lambda self: execution.ExecutionResult(
+            "STOP", execution.ExecutionStatus.COMPLETED, "test action"
+        ),
+    )
+    monkeypatch.setattr(
+        execution.LocalMusicPlayer,
+        "next_track",
+        lambda self: execution.ExecutionResult(
+            "NEXT", execution.ExecutionStatus.COMPLETED, "test action"
+        ),
+    )
+    monkeypatch.setattr(
+        execution.OutputVolume,
+        "adjust",
+        lambda self, intent, direction: execution.ExecutionResult(
             intent, execution.ExecutionStatus.COMPLETED, "test action"
         ),
     )
@@ -55,26 +84,181 @@ def test_dispatcher_covers_all_model_intents(
             assert result.status is execution.ExecutionStatus.UNAVAILABLE
         else:
             assert result.status is execution.ExecutionStatus.COMPLETED
+    dispatcher.close()
+
+
+def test_local_music_player_plays_sorted_tracks_and_next_wraps(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "b.mp3").touch()
+    (tmp_path / "A.wav").touch()
+    (tmp_path / "notes.txt").touch()
+    (tmp_path / "subdir").mkdir()
+    (tmp_path / "subdir" / "c.flac").touch()
+    commands: list[list[str]] = []
+
+    class Process:
+        def __init__(self) -> None:
+            self.running = True
+
+        def poll(self) -> int | None:
+            return None if self.running else 0
+
+        def terminate(self) -> None:
+            self.running = False
+
+        def wait(self, timeout: float) -> int:
+            return 0
+
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/ffplay")
+    monkeypatch.setattr(execution.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        execution.subprocess,
+        "Popen",
+        lambda command, **kwargs: commands.append(command) or Process(),
+    )
+    player = execution.LocalMusicPlayer(tmp_path)
+
+    assert player.play().status is execution.ExecutionStatus.COMPLETED
+    assert player.next_track().status is execution.ExecutionStatus.COMPLETED
+    assert player.next_track().status is execution.ExecutionStatus.COMPLETED
+    assert player.next_track().status is execution.ExecutionStatus.COMPLETED
+
+    assert [command[-1] for command in commands] == [
+        str(tmp_path / "A.wav"),
+        str(tmp_path / "b.mp3"),
+        str(tmp_path / "subdir" / "c.flac"),
+        str(tmp_path / "A.wav"),
+    ]
+    player.close()
+
+
+def test_local_music_player_picks_up_files_added_during_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "A.wav").touch()
+    (tmp_path / "b.mp3").touch()
+    commands: list[list[str]] = []
+
+    class Process:
+        def __init__(self) -> None:
+            self.running = True
+
+        def poll(self) -> int | None:
+            return None if self.running else 0
+
+        def terminate(self) -> None:
+            self.running = False
+
+        def wait(self, timeout: float) -> int:
+            return 0
+
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/ffplay")
+    monkeypatch.setattr(execution.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        execution.subprocess,
+        "Popen",
+        lambda command, **kwargs: commands.append(command) or Process(),
+    )
+    player = execution.LocalMusicPlayer(tmp_path)
+
+    assert player.play().status is execution.ExecutionStatus.COMPLETED
+    (tmp_path / "a1.mp3").touch()
+    assert player.next_track().status is execution.ExecutionStatus.COMPLETED
+
+    assert [command[-1] for command in commands] == [
+        str(tmp_path / "A.wav"),
+        str(tmp_path / "a1.mp3"),
+    ]
+    player.close()
+
+
+def test_local_music_player_pause_resume_stop_and_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    (tmp_path / "song.mp3").touch()
+    processes = []
+
+    class Process:
+        def __init__(self) -> None:
+            self.return_code = None
+            self.signals: list[int] = []
+            self.terminated = False
+
+        def poll(self) -> int | None:
+            return self.return_code
+
+        def send_signal(self, value: int) -> None:
+            self.signals.append(value)
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.return_code = -signal.SIGTERM
+
+        def wait(self, timeout: float) -> int:
+            return self.return_code or 0
+
+        def kill(self) -> None:
+            self.return_code = -signal.SIGKILL
+
+    def start_process(*args, **kwargs) -> Process:
+        process = Process()
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/ffplay")
+    monkeypatch.setattr(execution.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        execution.subprocess, "Popen", start_process
+    )
+    player = execution.LocalMusicPlayer(tmp_path)
+
+    assert player.play().status is execution.ExecutionStatus.COMPLETED
+    assert player.pause().status is execution.ExecutionStatus.COMPLETED
+    assert player.play().message == "music playback resumed"
+    assert player.stop().status is execution.ExecutionStatus.COMPLETED
+
+    assert processes[0].signals == [signal.SIGSTOP, signal.SIGCONT]
+    assert processes[0].terminated
+    player.close()
+
+
+def test_local_music_player_reports_missing_tracks_or_ffplay(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    player = execution.LocalMusicPlayer(tmp_path / "empty")
+
+    result = player.play()
+
+    assert result.status is execution.ExecutionStatus.UNAVAILABLE
+    assert "no supported music files" in result.message
+
+    (tmp_path / "song.mp3").touch()
+    monkeypatch.setattr(execution.shutil, "which", lambda _: None)
+    result = execution.LocalMusicPlayer(tmp_path).play()
+    assert result.status is execution.ExecutionStatus.UNAVAILABLE
+    assert "ffplay is not installed" in result.message
 
 
 @pytest.mark.parametrize(
-    ("intent", "arguments"),
+    ("intent", "direction", "step"),
     [
-        ("PLAY_MUSIC", ["play"]),
-        ("PAUSE", ["pause"]),
-        ("STOP", ["stop"]),
-        ("NEXT", ["next"]),
-        ("VOLUME_UP", ["volume", "0.05+"]),
-        ("VOLUME_DOWN", ["volume", "0.05-"]),
+        ("VOLUME_UP", "up", "5%+"),
+        ("VOLUME_DOWN", "down", "5%-"),
     ],
 )
-def test_media_intents_call_playerctl(
+def test_volume_intents_adjust_default_output(
     monkeypatch: pytest.MonkeyPatch,
     intent: str,
-    arguments: list[str],
+    direction: str,
+    step: str,
 ) -> None:
     commands: list[list[str]] = []
-    monkeypatch.setattr(execution.shutil, "which", lambda name: "/usr/bin/playerctl")
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/wpctl")
     monkeypatch.setattr(
         execution.subprocess,
         "run",
@@ -83,38 +267,31 @@ def test_media_intents_call_playerctl(
         ),
     )
 
-    result = execution.IntentDispatcher().execute(intent)
+    result = execution.OutputVolume().adjust(intent, direction)
 
-    assert commands == [["/usr/bin/playerctl", *arguments]]
+    assert commands == [
+        [
+            "/usr/bin/wpctl",
+            "set-volume",
+            "--limit",
+            "1.0",
+            "@DEFAULT_AUDIO_SINK@",
+            step,
+        ]
+    ]
     assert result.intent == intent
     assert result.status is execution.ExecutionStatus.COMPLETED
 
 
-def test_media_intent_reports_missing_playerctl(
+def test_volume_action_reports_missing_wpctl(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(execution.shutil, "which", lambda _: None)
 
-    result = execution.IntentDispatcher().execute("PLAY_MUSIC")
+    result = execution.OutputVolume().adjust("VOLUME_UP", "up")
 
     assert result.status is execution.ExecutionStatus.UNAVAILABLE
-    assert "playerctl is not installed" in result.message
-
-
-def test_media_command_failure_is_not_reported_as_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/playerctl")
-    monkeypatch.setattr(
-        execution.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            returncode=1, stderr=b"No players found"
-        ),
-    )
-
-    with pytest.raises(RuntimeError, match="No players found"):
-        execution.IntentDispatcher().execute("PAUSE")
+    assert "wpctl is not installed" in result.message
 
 
 def test_gpio_action_requires_explicit_pin_configuration(
