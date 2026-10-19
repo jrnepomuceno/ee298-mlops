@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request
 
 import numpy as np
 import pytest
@@ -11,6 +14,7 @@ from inference.pi5_runner import intent_execution as execution
 def test_dispatcher_covers_all_model_intents(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
     monkeypatch.setattr(
         execution.IntentDispatcher,
         "_player_action",
@@ -170,6 +174,129 @@ def test_time_intent_returns_local_time() -> None:
     assert result.intent == "TIME"
     assert result.status is execution.ExecutionStatus.COMPLETED
     assert result.message.startswith("The local time is ")
+
+
+def test_weather_intent_uses_current_weather_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENWEATHER_API_KEY", "test-key")
+    requests: list[tuple[str, float]] = []
+    responses = [
+        b'{"name":"Quezon City","main":{"temp":31.6},'
+        b'"weather":[{"description":"scattered clouds"}]}'
+    ]
+
+    class Response:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+        def read(self) -> bytes:
+            return self.body
+
+    def fake_urlopen(request: Request, *, timeout: float) -> Response:
+        requests.append((request.full_url, timeout))
+        return Response(responses.pop(0))
+
+    monkeypatch.setattr(execution, "urlopen", fake_urlopen)
+
+    result = execution.IntentDispatcher().execute("WEATHER")
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == (
+        "The current weather in Quezon City, Philippines is "
+        "32 degrees with scattered clouds."
+    )
+    assert "Celsius" not in result.message
+    assert len(requests) == 1
+    weather_url, timeout = requests[0]
+    assert urlparse(weather_url).path == "/data/2.5/weather"
+    weather_params = parse_qs(urlparse(weather_url).query)
+    assert weather_params["q"] == ["Quezon City,PH"]
+    assert weather_params["units"] == ["metric"]
+    assert weather_params["appid"] == ["test-key"]
+    assert timeout == 8
+    assert not responses
+
+
+def test_weather_intent_reports_missing_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        execution,
+        "urlopen",
+        lambda *args, **kwargs: pytest.fail("must not request without API key"),
+    )
+
+    result = execution.IntentDispatcher().execute("WEATHER")
+
+    assert result.status is execution.ExecutionStatus.UNAVAILABLE
+    assert result.message == (
+        "Weather is unavailable right now. Please try again later."
+    )
+
+
+def test_weather_http_error_does_not_expose_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret = "private-test-api-key"
+    monkeypatch.setenv("OPENWEATHER_API_KEY", secret)
+
+    def fail_request(request: Request, *, timeout: float) -> None:
+        raise HTTPError(request.full_url, 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(execution, "urlopen", fail_request)
+
+    result = execution.IntentDispatcher().execute("WEATHER")
+
+    assert result.status is execution.ExecutionStatus.UNAVAILABLE
+    assert secret not in result.message
+    assert secret not in caplog.text
+    assert "HTTP 401" in caplog.text
+
+
+def test_weather_intent_requests_current_conditions_each_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENWEATHER_API_KEY", "test-key")
+    requests: list[str] = []
+    responses = [
+        b'{"main":{"temp":30},"weather":[{"description":"clear sky"}]}',
+        b'{"main":{"temp":29},"weather":[{"description":"light rain"}]}',
+    ]
+
+    class Response:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+        def read(self) -> bytes:
+            return self.body
+
+    def fake_urlopen(request: Request, *, timeout: float) -> Response:
+        requests.append(request.full_url)
+        return Response(responses.pop(0))
+
+    monkeypatch.setattr(execution, "urlopen", fake_urlopen)
+    dispatcher = execution.IntentDispatcher()
+
+    assert dispatcher.execute("WEATHER").status is execution.ExecutionStatus.COMPLETED
+    assert dispatcher.execute("WEATHER").status is execution.ExecutionStatus.COMPLETED
+
+    assert len(requests) == 2
+    assert all("/data/2.5/weather" in request for request in requests)
 
 
 def test_dispatcher_rejects_invalid_intents() -> None:

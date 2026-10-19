@@ -542,7 +542,14 @@ class SpeechPlayer:
             )
 
         with tempfile.NamedTemporaryFile(suffix=".wav") as audio_file:
-            self._synthesize_to_file(text, audio_file.name)
+            synthesis_started = time.perf_counter()
+            try:
+                self._synthesize_to_file(text, audio_file.name)
+            finally:
+                logging.getLogger(__name__).info(
+                    "speech synthesis completed: duration_ms=%.1f",
+                    (time.perf_counter() - synthesis_started) * 1_000,
+                )
 
             if pipewire_target is not None:
                 command = [
@@ -556,6 +563,7 @@ class SpeechPlayer:
                 if self.device:
                     command.extend(["--device", self.device])
                 command.append(audio_file.name)
+            playback_started = time.perf_counter()
             try:
                 result = subprocess.run(
                     command,
@@ -566,6 +574,11 @@ class SpeechPlayer:
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("speech playback timed out") from exc
+            finally:
+                logging.getLogger(__name__).info(
+                    "speech playback completed: duration_ms=%.1f",
+                    (time.perf_counter() - playback_started) * 1_000,
+                )
             if result.returncode != 0:
                 details = result.stderr.decode("utf-8", errors="replace").strip()
                 raise RuntimeError(
@@ -752,6 +765,14 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--dummy-intent",
+        choices=EXECUTION_INTENT_NAMES,
+        help=(
+            "persistently dispatch this intent for every voiced command after "
+            "Alexa, without interpreting the words or loading ME2"
+        ),
+    )
+    parser.add_argument(
         "--tts-model",
         type=Path,
         default=Path(__file__).resolve().parent
@@ -792,6 +813,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--dummy-time cannot be combined with ME2 model options")
     if args.dummy_time and args.force_intent is not None:
         parser.error("--dummy-time cannot be combined with --force-intent")
+    if args.dummy_intent is not None and args.intent_model is not None:
+        parser.error("--dummy-intent cannot be combined with ME2 model options")
+    if args.dummy_intent is not None and (
+        args.dummy_time or args.force_intent is not None
+    ):
+        parser.error("--dummy-intent cannot be combined with other forced modes")
     if args.intent_threshold is not None and (
         not math.isfinite(args.intent_threshold)
         or not 0.0 <= args.intent_threshold <= 1.0
@@ -848,9 +875,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             forced_intent = getattr(args, "force_intent", None)
             dummy_time = getattr(args, "dummy_time", False)
+            dummy_intent = getattr(args, "dummy_intent", None)
             dispatcher = (
                 IntentDispatcher()
-                if predictor is not None or forced_intent is not None or dummy_time
+                if predictor is not None
+                or forced_intent is not None
+                or dummy_time
+                or dummy_intent is not None
                 else None
             )
             if dispatcher is not None:
@@ -872,7 +903,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info(
             "wake listener started: wake_word=alexa input=%s output=%s "
             "threshold=%.3f continuous=%s intent_inference=%s forced_intent=%s "
-            "dummy_time=%s",
+            "dummy_time=%s dummy_intent=%s",
             args.input_device,
             args.output_device or "default",
             args.threshold,
@@ -880,11 +911,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             predictor is not None,
             forced_intent or "disabled",
             dummy_time,
+            dummy_intent or "disabled",
         )
         if dummy_time:
             logger.warning(
                 "DUMMY MODE: forcing intent=TIME for every voiced command; "
                 "real ONNX inference is disabled"
+            )
+        elif dummy_intent is not None:
+            logger.warning(
+                "DUMMY MODE: forcing intent=%s for every voiced command; "
+                "real ONNX inference is disabled",
+                dummy_intent,
             )
         while True:
             capture.start()
@@ -894,6 +932,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "wake acknowledged: wake_word=alexa score=%.4f",
                 score,
             )
+            interaction_started = time.perf_counter()
             indicator_hold_started = time.monotonic()
             command: np.ndarray | None = None
             active_forced_intent = forced_intent
@@ -902,14 +941,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                     predictor is not None
                     or active_forced_intent is not None
                     or dummy_time
+                    or dummy_intent is not None
                 )
                 and dispatcher is not None
             ):
                 capture.start()
+                capture_started = time.perf_counter()
                 try:
                     command = record_command(capture)
                 finally:
                     capture.close()
+                    logger.info(
+                        "command capture completed: duration_ms=%.1f "
+                        "speech_detected=%s",
+                        (time.perf_counter() - capture_started) * 1_000,
+                        command is not None,
+                    )
             if predictor is not None and dispatcher is not None:
                 if command is None:
                     logger.warning(
@@ -933,7 +980,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if prediction.accepted
                         else "OUT_OF_SCOPE"
                     )
+                    execution_started = time.perf_counter()
                     result = dispatcher.execute(dispatch_label)
+                    logger.info(
+                        "intent execution completed: intent=%s duration_ms=%.1f",
+                        dispatch_label,
+                        (time.perf_counter() - execution_started) * 1_000,
+                    )
                     logger.info(
                         "intent result: intent=%s status=%s message=%s",
                         result.intent,
@@ -943,11 +996,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if speech_player is not None:
                         speak_with_indicator(speech_player, indicator, result.message)
             elif (
-                (active_forced_intent is not None or dummy_time)
+                (
+                    active_forced_intent is not None
+                    or dummy_time
+                    or dummy_intent is not None
+                )
                 and dispatcher is not None
             ):
                 if dummy_time:
                     intent_to_execute = "TIME"
+                elif dummy_intent is not None:
+                    intent_to_execute = dummy_intent
                 elif active_forced_intent is not None:
                     intent_to_execute = active_forced_intent
                 else:
@@ -956,15 +1015,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     logger.warning(
                         "%s intent %s was not executed because no command speech "
                         "was detected",
-                        "dummy" if dummy_time else "forced",
+                        "dummy"
+                        if dummy_time or dummy_intent is not None
+                        else "forced",
                         intent_to_execute,
                     )
                 else:
                     logger.info(
                         "%s intent dispatch: intent=%s",
-                        "dummy" if dummy_time else "forced",
+                        "dummy"
+                        if dummy_time or dummy_intent is not None
+                        else "forced",
                         intent_to_execute,
                     )
+                    execution_started = time.perf_counter()
                     result = dispatcher.execute(intent_to_execute)
                     logger.info(
                         "intent result: intent=%s status=%s message=%s "
@@ -972,13 +1036,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                         result.intent,
                         result.status,
                         result.message,
-                        "dummy_time" if dummy_time else "forced",
+                        "dummy_intent"
+                        if dummy_intent is not None
+                        else "dummy_time"
+                        if dummy_time
+                        else "forced",
+                    )
+                    logger.info(
+                        "intent execution completed: intent=%s duration_ms=%.1f",
+                        intent_to_execute,
+                        (time.perf_counter() - execution_started) * 1_000,
                     )
                     if speech_player is not None:
                         speak_with_indicator(speech_player, indicator, result.message)
-                if not dummy_time:
+                if not dummy_time and dummy_intent is None:
                     forced_intent = None
                     logger.info("forced intent cleared; returning to wake standby")
+            logger.info(
+                "wake-to-reply interaction completed: duration_ms=%.1f",
+                (time.perf_counter() - interaction_started) * 1_000,
+            )
             if indicator is not None:
                 remaining_hold = args.indicator_hold_seconds - (
                     time.monotonic() - indicator_hold_started

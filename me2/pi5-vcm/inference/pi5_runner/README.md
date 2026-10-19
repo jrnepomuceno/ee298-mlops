@@ -159,6 +159,20 @@ is unchanged. This is a stub at the dispatch seam, **not an ONNX model**, and
 it bypasses real ME2 inference. Startup and result logs identify dummy mode.
 Do not combine it with `--force-intent` or the real ME2 model options.
 
+To leave the runner persistently testing a different intent, use
+`--dummy-intent` instead. It dispatches that intent after every voiced
+command, ignores the command's words, and bypasses ME2 inference:
+
+```bash
+bash run_pi.sh --dummy-intent WEATHER
+```
+
+For the systemd service, set `PI5_VCM_DUMMY_INTENT` to the uppercase intent
+name when installing it, for example `PI5_VCM_DUMMY_INTENT=WEATHER
+bash install_service.sh`. The service remains on that intent until explicitly
+reinstalled in another mode. A one-wake `--force-intent` test does not change
+the persistent service configuration.
+
 `setup_pi.sh` installs Piper TTS and downloads the `en_US-lessac-medium` voice.
 When command handling is enabled, the runner loads Piper's voice model once at
 startup and reuses it for each response. Startup also runs three synthetic
@@ -181,6 +195,11 @@ purposes; see its
 [model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD)
 and [license](https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html).
 
+For command-path latency diagnostics, the runner logs command-capture,
+intent-execution, speech-synthesis, speech-playback, and total wake-to-reply
+durations for each interaction. The total starts after wake acknowledgement
+and includes waiting for the command, the command itself, and reply playback.
+
 Setup does not install or select the ME2 model, mel statistics, or threshold.
 Keep those artifacts paired with the checkpoint/export report that produced
 them.
@@ -192,8 +211,9 @@ set the installer flag when creating or replacing the service:
 PI5_VCM_DUMMY_TIME=1 bash install_service.sh
 ```
 
-Reinstall the service without that variable to restore normal standby. The
-service installer defaults to dummy mode off.
+Use `PI5_VCM_DUMMY_INTENT=WEATHER` to persistently test WEATHER instead. Set
+neither variable to restore normal standby; the service installer defaults to
+dummy mode off.
 
 ## Intent action scaffold
 
@@ -210,7 +230,44 @@ The currently implemented local actions are:
 | `PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT` | Run the matching `playerctl` command. |
 | `VOLUME_UP`, `VOLUME_DOWN` | Adjust the active player's volume by 5% with `playerctl`. |
 | `TIME` | Speak the Pi's local system time using Piper TTS. |
+| `WEATHER` | Speak current conditions in Quezon City using OpenWeather Current Weather API. |
 | `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
+
+Weather reads the API key from `OPENWEATHER_API_KEY` and queries
+`Quezon City,PH` through OpenWeather's
+[Current Weather API](https://openweathermap.org/api/current?collection=current_forecast)
+using metric units. This uses the city's query name directly, avoiding a
+separate geocoding request. The response's `main.temp` and
+`weather[0].description` are spoken. Temperature is phrased as metric
+"degrees" to avoid an unnecessary unit word in speech. The runner does not
+log the key or request URL.
+
+For the systemd service, create a private environment file on the Pi:
+
+```bash
+mkdir -p "$HOME/.config/pi5-vcm"
+install -m 600 /dev/null "$HOME/.config/pi5-vcm/environment"
+nano "$HOME/.config/pi5-vcm/environment"
+```
+
+Add this line to the file, replacing the placeholder locally (do not commit
+the file or share the key in chat):
+
+```text
+OPENWEATHER_API_KEY=your_openweather_api_key
+```
+
+Then install or refresh the service so it loads the environment file:
+
+```bash
+PI5_VCM_DUMMY_INTENT=WEATHER bash install_service.sh
+```
+
+The installer includes the file as an optional systemd `EnvironmentFile`; if
+it is absent, other runner features continue to work and WEATHER reports that
+weather configuration is unavailable. The dummy intent setting makes the
+Pi speak live WEATHER after every voiced command; change the installer mode
+explicitly when switching to another intent or back to normal inference.
 
 Install `playerctl` on the Pi to use media controls. For light control, wire
 the selected BCM GPIO to a suitable relay/driver and configure its pin, for
@@ -218,11 +275,11 @@ example `PI5_VCM_LIGHT_GPIO=17`. Do not connect a relay coil or other high-load
 device directly to a Raspberry Pi GPIO. GPIO actions require `gpiozero`, which
 is supplied by the Raspberry Pi OS packages installed by `setup_pi.sh`.
 
-Weather, telephony, messaging, reminders, timers, alarms, temperature,
-brightness, and color actions return `unavailable` until their corresponding
-service or hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`.
-Slot-based intents are included in the dispatch table, but their predicted
-slot values are not yet acted on.
+Telephony, messaging, reminders, timers, alarms, temperature, brightness, and
+color actions return `unavailable` until their corresponding service or
+hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Slot-based
+intents are included in the dispatch table, but their predicted slot values
+are not yet acted on.
 
 An inference loop can dispatch a predicted class ID like this:
 

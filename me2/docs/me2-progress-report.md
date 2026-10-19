@@ -81,31 +81,66 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - Added local action dispatch for time, optional GPIO light control, and
   `playerctl` media actions. Unsupported integrations report `unavailable`;
   out-of-scope predictions are rejected.
+- Implemented current WEATHER responses for Quezon City, Philippines, using
+  OpenWeather Current Weather API and `OPENWEATHER_API_KEY`. The provider
+  requests metric conditions by city name and avoids logging the API key or
+  URL. The systemd installer supports an optional private runtime environment
+  file. The key was present in the Pi's `.bashrc` but was not inherited by
+  systemd; it was copied into the private environment file and verified present
+  in the running process without exposing its value. One Call API 4.0 returned
+  HTTP 401 for that key, so the provider was switched to Current Weather API.
+  The Current Weather API returned live Quezon City conditions in a spoken Pi
+  interaction. Speech says the temperature in metric "degrees" without the word
+  "Celsius", which this Piper voice mispronounced; the API units and numeric
+  value remain metric.
 - Extended the Pi 5 wake runner with optional command capture, inference or
-  explicit test-intent dispatch, and Piper speech output. Persistent dummy TIME
-  mode is opt-in and bypasses inference; it does not use a fabricated ONNX model.
+  explicit test-intent dispatch, and Piper speech output. Persistent
+  `--dummy-time` and `--dummy-intent INTENT` modes are opt-in and bypass
+  inference; they do not use a fabricated ONNX model. The service installer can
+  persist either test mode. The Pi service is currently set to persistent
+  `--dummy-intent WEATHER`, which dispatches WEATHER for every voiced command
+  after Alexa, regardless of the command's words.
 - Loaded Piper's voice once and reused it for replies. Added silent startup
   warmup for the wake-word model and Piper synthesis.
+- Added per-interaction timing logs for command capture, intent execution,
+  Piper synthesis, speech playback, and total time from wake acknowledgement to
+  completion.
 - Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
   rainbow cycle during warmup, off in standby, blue on wake, green while the
   spoken reply plays, then off. The existing optional GPIO indicator remains
   available separately.
 - Deployed the runner and QuadcastRGB foreground executable to the Raspberry
-  Pi 5. The systemd user service was verified active in dummy TIME mode with
-  wake-word capture running. A live end-to-end audible command test remains
-  intentionally untriggered.
-- Focused inference/runner tests: 62 passed. Python compilation, shell syntax,
-  and `git diff --check` passed.
+  Pi 5. The systemd user service was verified active in persistent WEATHER mode
+  with DuoCast audio capture running.
+- One live wake-to-spoken-WEATHER interaction completed successfully on the
+  Pi. Its measured durations were: command capture 4,181 ms (includes the
+  spoken command and 800 ms end-of-speech silence); WEATHER execution 367 ms;
+  speech synthesis 637 ms; playback 5,309 ms; and 10,925 ms from wake
+  acknowledgement through playback completion. These are one-interaction
+  measurements, not latency percentiles. Playback duration measures the whole
+  spoken response, not time to first audible output.
+- Focused wake-runner and intent-execution tests: 58 passed. Python compilation,
+  installer shell syntax, and `git diff --check` passed.
 
 ### Not yet verified or completed
 
 - The ONNX models available on the Pi do not match the predictor's ME2 input,
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
-- Slot values are decoded but are not yet consumed by timer, alarm, temperature,
-  brightness, color, or reminder adapters.
-- A live wake-to-spoken-response test has not been performed after the latest
-  Piper warmup and RGB state changes.
+- The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
+  `LIST_REMINDERS`, `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, `COLOR`, and
+  `CREATE_REMINDER`; their service or hardware adapters are not configured.
+  `OUT_OF_SCOPE` is rejected by design.
+- `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin, and media intents
+  (`PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT`, `VOLUME_UP`, `VOLUME_DOWN`) require a
+  working `playerctl` target. Their real-device behavior has not been validated
+  on the Pi in this progress update.
+- Persistent `--dummy-intent WEATHER` is a test/demo mode, not model-routed
+  inference: it dispatches WEATHER after every voiced command regardless of
+  what was said. Real ME2 inference remains blocked on a compatible exported
+  model and its paired `mel_stats.npz`.
+- One live WEATHER interaction has been timed, but latency percentiles and the
+  Phase 1 benchmark requirements have not been measured.
 - End-to-end latency percentiles and the Phase 1 benchmark requirements have
   not been measured.
 

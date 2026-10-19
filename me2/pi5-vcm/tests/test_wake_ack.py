@@ -300,6 +300,20 @@ def test_parse_args_accepts_persistent_dummy_time() -> None:
     assert args.dummy_time
 
 
+def test_parse_args_accepts_persistent_dummy_intent() -> None:
+    args = runtime._parse_args(
+        [
+            "--wakeword-model",
+            "alexa.onnx",
+            "--no-led",
+            "--dummy-intent",
+            "WEATHER",
+        ]
+    )
+
+    assert args.dummy_intent == "WEATHER"
+
+
 def test_parse_args_accepts_hyperx_rgb_executable() -> None:
     args = runtime._parse_args(
         [
@@ -341,6 +355,7 @@ def test_parse_args_rejects_forced_intent_with_model_configuration() -> None:
         ["--intent-model", "me2.onnx", "--mel-stats", "mel_stats.npz",
          "--intent-threshold", "0.78"],
         ["--force-intent", "TIME"],
+        ["--dummy-intent", "WEATHER"],
     ],
 )
 def test_parse_args_rejects_dummy_time_with_other_inference_modes(
@@ -453,10 +468,34 @@ def test_forced_intent_applies_to_one_wake_then_clears(
     assert "forced intent cleared; returning to wake standby" in caplog.text
 
 
-def test_dummy_time_dispatches_and_speaks_on_every_wake(
+@pytest.mark.parametrize(
+    (
+        "dummy_time",
+        "dummy_intent",
+        "expected_intent",
+        "expected_mode",
+        "expected_warning",
+    ),
+    [
+        (True, None, "TIME", "dummy_time", "DUMMY MODE: forcing intent=TIME"),
+        (
+            False,
+            "WEATHER",
+            "WEATHER",
+            "dummy_intent",
+            "DUMMY MODE: forcing intent=WEATHER",
+        ),
+    ],
+)
+def test_persistent_dummy_intent_dispatches_and_speaks_on_every_wake(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     tmp_path: Path,
+    dummy_time: bool,
+    dummy_intent: str | None,
+    expected_intent: str,
+    expected_mode: str,
+    expected_warning: str,
 ) -> None:
     caplog.set_level("INFO")
     events: list[str] = []
@@ -500,7 +539,8 @@ def test_dummy_time_dispatches_and_speaks_on_every_wake(
             events.append("dispatcher-close")
 
     args = Namespace(
-        dummy_time=True,
+        dummy_intent=dummy_intent,
+        dummy_time=dummy_time,
         input_device="test-mic",
         indicator_hold_seconds=0.0,
         led_gpio=None,
@@ -558,12 +598,12 @@ def test_dummy_time_dispatches_and_speaks_on_every_wake(
 
     assert wake_count == 3
     assert events.count("record-command") == 3
-    assert events.count("dispatch:TIME") == 2
+    assert events.count(f"dispatch:{expected_intent}") == 2
     assert events.count("speak:The local time is test.") == 2
-    assert "DUMMY MODE: forcing intent=TIME" in caplog.text
-    assert "inference_mode=dummy_time" in caplog.text
+    assert expected_warning in caplog.text
+    assert f"inference_mode={expected_mode}" in caplog.text
     assert "forced intent cleared" not in caplog.text
-    assert "dummy intent TIME was not executed" in caplog.text
+    assert f"dummy intent {expected_intent} was not executed" in caplog.text
     assert "dispatcher-close" in events
 
 

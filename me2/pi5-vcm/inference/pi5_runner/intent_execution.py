@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -9,7 +10,11 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from math import isfinite
 from numbers import Integral
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 INTENT_NAMES = (
     "PLAY_MUSIC",
@@ -35,6 +40,93 @@ INTENT_NAMES = (
 )
 
 logger = logging.getLogger(__name__)
+
+OPENWEATHER_CURRENT_URL = (
+    "https://api.openweathermap.org/data/2.5/weather"
+)
+WEATHER_LOCATION = "Quezon City,PH"
+WEATHER_LOCATION_LABEL = "Quezon City, Philippines"
+WEATHER_REQUEST_TIMEOUT_SECONDS = 8
+
+
+class WeatherServiceError(RuntimeError):
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class OpenWeatherClient:
+    """Fetch current conditions from OpenWeather Current Weather API."""
+
+    def current_conditions(self) -> str:
+        api_key = os.environ.get("OPENWEATHER_API_KEY", "").strip()
+        if not api_key:
+            raise WeatherServiceError("OPENWEATHER_API_KEY is not configured")
+
+        response = self._request_json(
+            OPENWEATHER_CURRENT_URL,
+            {
+                "q": WEATHER_LOCATION,
+                "units": "metric",
+                "appid": api_key,
+            },
+        )
+        try:
+            if not isinstance(response, dict):
+                raise TypeError("response must be an object")
+            current = response["main"]
+            if not isinstance(current, dict):
+                raise TypeError("main conditions must be an object")
+            temperature = current["temp"]
+            weather_data = response["weather"]
+            if (
+                not isinstance(weather_data, list)
+                or not weather_data
+                or not isinstance(weather_data[0], dict)
+            ):
+                raise TypeError("weather data must be a non-empty object list")
+            description = weather_data[0]["description"]
+        except (KeyError, TypeError) as exc:
+            raise WeatherServiceError(
+                "OpenWeather returned an incomplete current-conditions response"
+            ) from exc
+
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not isfinite(temperature)
+            or not isinstance(description, str)
+            or not description.strip()
+        ):
+            raise WeatherServiceError(
+                "OpenWeather returned invalid current-conditions data"
+            )
+
+        return (
+            f"The current weather in {WEATHER_LOCATION_LABEL} is "
+            f"{round(temperature)} degrees with {description.strip()}."
+        )
+
+    @staticmethod
+    def _request_json(url: str, parameters: dict[str, object]) -> object:
+        request = Request(
+            f"{url}?{urlencode(parameters)}",
+            headers={"User-Agent": "pi5-vcm/1.0"},
+        )
+        try:
+            with urlopen(request, timeout=WEATHER_REQUEST_TIMEOUT_SECONDS) as response:
+                return json.loads(response.read())
+        except HTTPError as exc:
+            raise WeatherServiceError(
+                f"OpenWeather request failed with HTTP {exc.code}",
+                status_code=exc.code,
+            ) from None
+        except (URLError, TimeoutError, OSError) as exc:
+            raise WeatherServiceError("OpenWeather request failed") from exc
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise WeatherServiceError(
+                "OpenWeather returned an invalid JSON response"
+            ) from exc
 
 
 class ExecutionStatus(str, Enum):
@@ -82,11 +174,10 @@ class IntentDispatcher:
 
     def __init__(self) -> None:
         self._gpio_light: GpioLight | None = None
+        self._weather_client = OpenWeatherClient()
         self._handlers = {
             "PLAY_MUSIC": lambda: self._player_action("PLAY_MUSIC", "play"),
-            "WEATHER": lambda: self._unavailable(
-                "WEATHER", "a weather provider is not configured"
-            ),
+            "WEATHER": self._tell_weather,
             "TIME": self._tell_time,
             "LIGHT_ON": lambda: self._set_light(True),
             "LIGHT_OFF": lambda: self._set_light(False),
@@ -191,6 +282,27 @@ class IntentDispatcher:
             intent=intent,
             status=ExecutionStatus.COMPLETED,
             message=f"media action completed: {arguments[0]}",
+        )
+
+    def _tell_weather(self) -> ExecutionResult:
+        try:
+            message = self._weather_client.current_conditions()
+        except WeatherServiceError as exc:
+            if exc.status_code is not None:
+                logger.warning(
+                    "weather request failed: HTTP %d",
+                    exc.status_code,
+                )
+            else:
+                logger.warning("weather request unavailable: %s", exc)
+            return self._unavailable(
+                "WEATHER",
+                "Weather is unavailable right now. Please try again later.",
+            )
+        return ExecutionResult(
+            intent="WEATHER",
+            status=ExecutionStatus.COMPLETED,
+            message=message,
         )
 
     def _set_light(self, enabled: bool) -> ExecutionResult:
