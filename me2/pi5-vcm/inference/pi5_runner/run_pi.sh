@@ -36,6 +36,29 @@ else
     args+=(--no-led)
 fi
 
+hyperx_rgb="${PI5_VCM_HYPERX_RGB:-auto}"
+if [[ "$hyperx_rgb" != "auto" && "$hyperx_rgb" != "0" && "$hyperx_rgb" != "1" ]]; then
+    printf 'PI5_VCM_HYPERX_RGB must be auto, 0, or 1.\n' >&2
+    exit 1
+fi
+rgb_executable="${PI5_VCM_RGB_EXECUTABLE:-}"
+if [[ -n "$rgb_executable" && ! -x "$rgb_executable" ]]; then
+    printf 'PI5_VCM_RGB_EXECUTABLE is not executable: %s\n' "$rgb_executable" >&2
+    exit 1
+fi
+if [[ -z "$rgb_executable" ]]; then
+    rgb_executable="$(command -v quadcastrgb-foreground || true)"
+fi
+if [[ -z "$rgb_executable" && -x "$HOME/.local/bin/quadcastrgb-foreground" ]]; then
+    rgb_executable="$HOME/.local/bin/quadcastrgb-foreground"
+fi
+if [[ "$hyperx_rgb" != "0" && -n "$rgb_executable" && -x "$rgb_executable" ]]; then
+    args+=(--hyperx-rgb-executable "$rgb_executable")
+elif [[ "$hyperx_rgb" == "1" ]]; then
+    printf 'HyperX RGB was required but foreground QuadcastRGB is not executable; install it or set PI5_VCM_RGB_EXECUTABLE.\n' >&2
+    exit 1
+fi
+
 cd "$SCRIPT_DIR"
 export PYTHONNOUSERSITE=1
 exec "$VENV_DIR/bin/python" "$SCRIPT_DIR/wake_ack.py" "${args[@]}" "$@"

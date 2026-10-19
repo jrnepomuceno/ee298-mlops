@@ -1,7 +1,7 @@
 # ME2 Progress Report
 
-**Date:** 2026-10-14
-**Scope:** Dataset source, preparation, and dataloaders in `pi5-vcm`
+**Date:** 2026-10-19
+**Scope:** Dataset pipeline and Phase 1 Pi inference runner in `pi5-vcm`
 
 ## Summary
 
@@ -70,7 +70,46 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - Split manifest SHA-256:
   `2891e8fd1af3d5305bc0f720084a2ee85af050b01224f01121d8295b8e3c4c0a`.
 
-## Not yet verified or completed
+## Phase 1 inference runner update (2026-10-19)
+
+### Completed
+
+- Added a CPU ONNX Runtime predictor for the expected ME2 contract: float
+  `mel_features`, boolean `frame_mask`, 20 intent probabilities, and six
+  3-class slot heads. The frontend computes 80-bin log-mel features and applies
+  paired training statistics.
+- Added local action dispatch for time, optional GPIO light control, and
+  `playerctl` media actions. Unsupported integrations report `unavailable`;
+  out-of-scope predictions are rejected.
+- Extended the Pi 5 wake runner with optional command capture, inference or
+  explicit test-intent dispatch, and Piper speech output. Persistent dummy TIME
+  mode is opt-in and bypasses inference; it does not use a fabricated ONNX model.
+- Loaded Piper's voice once and reused it for replies. Added silent startup
+  warmup for the wake-word model and Piper synthesis.
+- Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
+  rainbow cycle during warmup, off in standby, blue on wake, green while the
+  spoken reply plays, then off. The existing optional GPIO indicator remains
+  available separately.
+- Deployed the runner and QuadcastRGB foreground executable to the Raspberry
+  Pi 5. The systemd user service was verified active in dummy TIME mode with
+  wake-word capture running. A live end-to-end audible command test remains
+  intentionally untriggered.
+- Focused inference/runner tests: 62 passed. Python compilation, shell syntax,
+  and `git diff --check` passed.
+
+### Not yet verified or completed
+
+- The ONNX models available on the Pi do not match the predictor's ME2 input,
+  output, and slot contract. A compatible exported model and its paired
+  `mel_stats.npz` are still required before real ME2 predictions can be run.
+- Slot values are decoded but are not yet consumed by timer, alarm, temperature,
+  brightness, color, or reminder adapters.
+- A live wake-to-spoken-response test has not been performed after the latest
+  Piper warmup and RGB state changes.
+- End-to-end latency percentiles and the Phase 1 benchmark requirements have
+  not been measured.
+
+## Original dataset-pipeline follow-ups
 
 - Phase 1 requires a different numerals snapshot or a plan-approved change to its
   duration requirement; neither has been made.
@@ -79,8 +118,8 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   statistics (`mel_stats.npz`), and masked-frame construction belong to the
   planned feature/pretraining implementation and are not part of this completed
   data-loader scope.
-- Model, loss, training, export, inference, benchmark, and deployment work remains
-  outside this report's scope.
+- Model training, export, and benchmark work remain incomplete; the inference
+  runner and deployment progress are recorded in the update above.
 
 ## Reproduction commands
 

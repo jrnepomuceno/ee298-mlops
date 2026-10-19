@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 UNIT_NAME="pi5-vcm-inference.service"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_PATH="$UNIT_DIR/$UNIT_NAME"
+DUMMY_TIME="${PI5_VCM_DUMMY_TIME:-0}"
 
 if [[ ! -x "$SCRIPT_DIR/.venv/bin/python" ]]; then
     printf 'Runner is not set up yet; run bash "%s/setup_pi.sh" first.\n' "$SCRIPT_DIR" >&2
@@ -13,6 +14,15 @@ fi
 if ! systemctl --user is-system-running >/dev/null 2>&1; then
     printf 'systemd user manager is not running for %s.\n' "$USER" >&2
     exit 1
+fi
+if [[ "$DUMMY_TIME" != "0" && "$DUMMY_TIME" != "1" ]]; then
+    printf 'PI5_VCM_DUMMY_TIME must be 0 or 1.\n' >&2
+    exit 1
+fi
+
+RUNNER_ARGS=""
+if [[ "$DUMMY_TIME" == "1" ]]; then
+    RUNNER_ARGS=" --dummy-time"
 fi
 
 mkdir -p "$UNIT_DIR"
@@ -25,7 +35,7 @@ Wants=pipewire.service wireplumber.service
 [Service]
 Type=simple
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=/usr/bin/bash $SCRIPT_DIR/run_pi.sh
+ExecStart=/usr/bin/bash $SCRIPT_DIR/run_pi.sh$RUNNER_ARGS
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGINT
@@ -50,3 +60,8 @@ if [[ "$linger" != "yes" ]]; then
 fi
 
 printf '\nLive logs:\n  journalctl --user -u %s -f\n' "$UNIT_NAME"
+if [[ "$DUMMY_TIME" == "1" ]]; then
+    printf '\nWARNING: persistent dummy TIME mode is enabled for every voiced command.\n'
+else
+    printf '\nNormal standby mode is enabled; dummy TIME mode is off.\n'
+fi

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 ASSET_DIR="$SCRIPT_DIR/models/openwakeword"
+TTS_ASSET_DIR="$SCRIPT_DIR/models/tts"
 PYTHON_BIN="${PYTHON:-python3}"
 CONFIG_DIR="$SCRIPT_DIR/.config"
 WIREPLUMBER_CONFIG_SOURCE="$SCRIPT_DIR/wireplumber/51-willen-no-idle-suspend.conf"
@@ -34,6 +35,7 @@ if ! "$PYTHON_BIN" -m venv --help >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname -- "$VENV_DIR")" "$ASSET_DIR" "$CONFIG_DIR"
+mkdir -p "$TTS_ASSET_DIR"
 "$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR"
 export PYTHONNOUSERSITE=1
 
@@ -58,6 +60,14 @@ fi
     "tqdm>=4,<5"
 "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check \
     --no-deps "openwakeword==0.6.0"
+"$VENV_DIR/bin/python" -m pip install --disable-pip-version-check \
+    "piper-tts==1.8.0"
+"$VENV_DIR/bin/python" -m piper.download_voices \
+    --data-dir "$TTS_ASSET_DIR" en_US-lessac-medium
+[[ -s "$TTS_ASSET_DIR/en_US-lessac-medium.onnx" ]] \
+    || fail "Piper voice model download is missing"
+[[ -s "$TTS_ASSET_DIR/en_US-lessac-medium.onnx.json" ]] \
+    || fail "Piper voice configuration download is missing"
 
 download_asset() {
     local filename="$1"
@@ -137,4 +147,6 @@ printf '\nSetup complete.\n'
 printf 'Start Alexa wake detection with:\n  bash "%s/run_pi.sh"\n' "$SCRIPT_DIR"
 printf 'WILLEN host-side idle suspend is disabled by the installed WirePlumber configuration.\n'
 printf 'No LED is enabled until a BCM pin is supplied.\n'
-printf 'This setup provides wake acknowledgement only; ME2 command inference is not included.\n'
+printf 'Piper TTS and the en_US-lessac-medium voice are installed for spoken action responses.\n'
+printf 'ME2 inference is optional: pass --intent-model, --mel-stats, and --intent-threshold; use --force-intent INTENT for a one-wake action test.\n'
+printf 'Persistent TIME-only test mode is opt-in: pass --dummy-time to run_pi.sh or PI5_VCM_DUMMY_TIME=1 to install_service.sh.\n'

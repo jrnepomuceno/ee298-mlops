@@ -69,12 +69,43 @@ bash uninstall_service.sh
 
 The runner captures mono 16-kHz audio from the HyperX DuoCast, detects
 “Alexa,” stops capture, and plays the acknowledgement beep through WILLEN.
-The GPIO indicator is disabled by default because the LED's BCM pin has not
-been specified. Once wired, set it for a run, for example:
+The external GPIO indicator is disabled by default because the LED's BCM pin
+has not been specified. Once wired, set it for a run, for example:
 
 ```bash
 PI5_VCM_LED_GPIO=17 bash run_pi.sh
 ```
+
+The foreground QuadcastRGB build, `quadcastrgb-foreground`, is automatically
+used by `run_pi.sh` when present. The standard upstream binary daemonizes and
+keeps the USB interface open, so it cannot be switched between warmup and wake
+states by the runner. Build the foreground variant on the Pi with:
+
+```bash
+git clone --depth 1 https://github.com/Ors1mer/QuadcastRGB.git \
+  "$HOME/.local/src/QuadcastRGB"
+make -C "$HOME/.local/src/QuadcastRGB" dev
+install -m 0755 "$HOME/.local/src/QuadcastRGB/dev" \
+  "$HOME/.local/bin/quadcastrgb-foreground"
+```
+
+The Pi's DuoCast USB ID (`03f0:098c`) is supported by
+[QuadcastRGB](https://github.com/Ors1mer/QuadcastRGB). When enabled, the
+microphone cycles RGB during startup warmup, turns its lights off when warmup
+completes, lights blue when Alexa is detected, changes to green while Piper's
+reply is playing, and turns off after command handling. The GPIO indicator
+remains a simple on/off indicator. If the foreground binary is not on `PATH`
+or in `~/.local/bin/`, set its path explicitly:
+
+```bash
+PI5_VCM_RGB_EXECUTABLE=/path/to/quadcastrgb-foreground bash run_pi.sh
+```
+
+Set `PI5_VCM_HYPERX_RGB=0` to disable automatic RGB control, or set it to `1`
+to require the utility and fail at startup if it is missing. The utility
+requires USB access to the microphone; see its upstream instructions if it
+reports a permissions error. A separate GPIO indicator can be used alongside
+the DuoCast RGB by also setting `PI5_VCM_LED_GPIO`.
 
 For a one-shot diagnostic rather than a continuous listener, pass `--once`:
 
@@ -82,11 +113,133 @@ For a one-shot diagnostic rather than a continuous listener, pass `--once`:
 bash run_pi.sh --once
 ```
 
-This is still only the wake-and-acknowledgement slice. It does not record a
-command, run ME2 inference, or execute actions. The accepted ME2 model and its
-normalization/configuration are intentionally not included yet. The model
-files downloaded by setup are stored under `models/openwakeword/`; they are
-not embedded into the Git repository.
+By default, the runner handles wake acknowledgement only. To enable the Phase 1
+command path, provide an exported ME2 ONNX model, its paired training-only mel
+statistics, and the model's tuned in-scope confidence threshold:
+
+```bash
+bash run_pi.sh \
+  --intent-model /path/to/model.onnx \
+  --mel-stats /path/to/mel_stats.npz \
+  --intent-threshold 0.78
+```
+
+The runner acknowledges the wake word, records one mono 16-kHz command (up to
+8 seconds, ending after 0.8 seconds of silence), runs ME2 inference, and dispatches
+an accepted intent. It waits up to 3 seconds for speech and ignores recordings
+with less than 0.24 seconds of detected voice. The three `--intent-*` options
+must be supplied together. An absent/unavailable action integration is reported
+as `unavailable`; a rejected or out-of-scope prediction is not executed.
+
+To test one scaffolded action without a compatible ME2 model, force an intent
+for the next wake-command only:
+
+```bash
+bash run_pi.sh --force-intent TIME
+```
+
+After Alexa is acknowledged, the runner still requires a voiced command, but
+does not interpret its words; it dispatches `TIME` once and clears the override
+when it returns to wake standby. This is useful for exercising an action while
+its model integration is unfinished. `--force-intent` cannot be combined with
+the ME2 model options. Select media or GPIO intents only when you intend those
+real actions to occur.
+
+For a persistent, explicitly enabled TIME-only test mode, use:
+
+```bash
+bash run_pi.sh --dummy-time
+```
+
+Each Alexa wake prompts for a voiced command, ignores its words, dispatches
+`TIME`, speaks the result with Piper, and remains enabled for later wakes.
+Silence or a missed wake-command does not clear the mode. Stop the process with
+Ctrl+C to return to standby; without `--dummy-time`, normal wake-only behavior
+is unchanged. This is a stub at the dispatch seam, **not an ONNX model**, and
+it bypasses real ME2 inference. Startup and result logs identify dummy mode.
+Do not combine it with `--force-intent` or the real ME2 model options.
+
+`setup_pi.sh` installs Piper TTS and downloads the `en_US-lessac-medium` voice.
+When command handling is enabled, the runner loads Piper's voice model once at
+startup and reuses it for each response. Startup also runs three synthetic
+silence frames through the wake-word detector and resets its state, then
+synthesizes and discards a short Piper warmup WAV. Neither warmup reads from the
+microphone or plays sound. Startup logs the warmup durations before declaring
+the listener ready.
+
+For real responses, Piper synthesizes to a temporary WAV, which is played
+through the configured PipeWire/ALSA output and then removed. On the configured
+Pi 5, a short TIME phrase took about 3.7–3.9 seconds through a fresh Piper CLI
+process, versus about 0.31 seconds to synthesize with the already-loaded Piper
+API. Model loading costs about 3.3 seconds once at startup instead of on every
+reply. Command-end detection still waits for 0.8 seconds of silence; that pause
+is retained to avoid cutting off commands. These timings are local measurements
+and may vary with system load.
+
+The selected voice model's source dataset license limits use to research
+purposes; see its
+[model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD)
+and [license](https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html).
+
+Setup does not install or select the ME2 model, mel statistics, or threshold.
+Keep those artifacts paired with the checkpoint/export report that produced
+them.
+
+To keep the persistent dummy TIME mode in the systemd user service, explicitly
+set the installer flag when creating or replacing the service:
+
+```bash
+PI5_VCM_DUMMY_TIME=1 bash install_service.sh
+```
+
+Reinstall the service without that variable to restore normal standby. The
+service installer defaults to dummy mode off.
+
+## Intent action scaffold
+
+The dispatcher accepts either a class ID (0–19) or an intent label using the
+ME2 20-class order. The caller must apply the selected model's out-of-scope
+threshold before dispatch. The dispatcher returns an `ExecutionResult` with
+`completed`, `unavailable`, or `rejected` status; it does not treat a missing
+integration as a successful action.
+
+The currently implemented local actions are:
+
+| Intent(s) | Action |
+| --- | --- |
+| `PLAY_MUSIC`, `PAUSE`, `STOP`, `NEXT` | Run the matching `playerctl` command. |
+| `VOLUME_UP`, `VOLUME_DOWN` | Adjust the active player's volume by 5% with `playerctl`. |
+| `TIME` | Speak the Pi's local system time using Piper TTS. |
+| `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
+
+Install `playerctl` on the Pi to use media controls. For light control, wire
+the selected BCM GPIO to a suitable relay/driver and configure its pin, for
+example `PI5_VCM_LIGHT_GPIO=17`. Do not connect a relay coil or other high-load
+device directly to a Raspberry Pi GPIO. GPIO actions require `gpiozero`, which
+is supplied by the Raspberry Pi OS packages installed by `setup_pi.sh`.
+
+Weather, telephony, messaging, reminders, timers, alarms, temperature,
+brightness, and color actions return `unavailable` until their corresponding
+service or hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`.
+Slot-based intents are included in the dispatch table, but their predicted
+slot values are not yet acted on.
+
+An inference loop can dispatch a predicted class ID like this:
+
+```python
+from intent_execution import IntentDispatcher
+
+dispatcher = IntentDispatcher()
+try:
+    result = dispatcher.execute(predicted_intent_id)
+    print(result.status, result.message)
+finally:
+    dispatcher.close()
+```
+
+The model's six slot outputs are decoded, but slot-based actions are not yet
+implemented. The wake-word model files downloaded by setup are stored under
+`models/openwakeword/`; they are not embedded into the Git repository.
 
 ## Dependency note
 
