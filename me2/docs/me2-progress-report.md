@@ -1,6 +1,6 @@
 # ME2 Progress Report
 
-**Date:** 2026-10-19
+**Date:** 2026-10-20
 **Scope:** Dataset pipeline and Phase 1 Pi inference runner in `pi5-vcm`
 
 ## Summary
@@ -70,7 +70,7 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - Split manifest SHA-256:
   `2891e8fd1af3d5305bc0f720084a2ee85af050b01224f01121d8295b8e3c4c0a`.
 
-## Phase 1 inference runner update (2026-10-19)
+## Phase 1 inference runner update (2026-10-20)
 
 ### Completed
 
@@ -115,6 +115,14 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - Added per-interaction timing logs for command capture, intent execution,
   Piper synthesis, speech playback, and total time from wake acknowledgement to
   completion.
+- Implemented persistent, undated `CREATE_REMINDER` and `LIST_REMINDERS`.
+  The CREATE_REMINDER action slot supports Drink water, Study, and Exercise;
+  entries are stored atomically in a local JSON file (default
+  `~/.config/pi5-vcm/reminders.json`, configurable with
+  `PI5_VCM_REMINDERS_FILE`). LIST_REMINDERS speaks up to the five newest
+  entries. These are list entries only; the model slot has no due date/time,
+  and no scheduling or notifications are provided. Validation so far is
+  pytest-only; this has not been tested on the Pi.
 - Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
   rainbow cycle during warmup, off in standby, blue on wake, green while the
   spoken reply plays, then off. The existing optional GPIO indicator remains
@@ -129,8 +137,10 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   acknowledgement through playback completion. These are one-interaction
   measurements, not latency percentiles. Playback duration measures the whole
   spoken response, not time to first audible output.
-- Focused wake-runner and intent-execution tests: 57 passed. Python compilation,
-  installer shell syntax, and `git diff --check` passed.
+- Earlier focused wake-runner and intent-execution tests: 57 passed. After the
+  reminder changes, the focused reminder-store, intent-execution, and
+  wake-runner suite passed: 71 tests. Python compilation and
+  `git diff --check` passed for the reminder changes.
 
 ### Not yet verified or completed
 
@@ -138,9 +148,10 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
 - The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
-  `LIST_REMINDERS`, `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, `COLOR`, and
-  `CREATE_REMINDER`; their service or hardware adapters are not configured.
-  `OUT_OF_SCOPE` is rejected by design.
+  `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, and `COLOR`; their service or
+  hardware adapters are not configured. `OUT_OF_SCOPE` is rejected by design.
+- Reminder behavior has only been verified with pytest. It still needs
+  on-device validation when the Pi is available.
 - `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin; their real-device
   behavior has not been validated on the Pi in this progress update.
 - Persistent `--dummy-intent PLAY_MUSIC` is a test/demo mode, not model-routed

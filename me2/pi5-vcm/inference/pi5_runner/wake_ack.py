@@ -20,10 +20,15 @@ import numpy as np
 
 if __package__:
     from .intent_execution import INTENT_NAMES as EXECUTION_INTENT_NAMES
+    from .intent_execution import (
+        CREATE_REMINDER_ACTIONS,
+        CREATE_REMINDER_SLOT_INDEX,
+    )
     from .intent_execution import IntentDispatcher
     from .intent_inference import OnnxIntentPredictor
 else:
     from intent_execution import INTENT_NAMES as EXECUTION_INTENT_NAMES
+    from intent_execution import CREATE_REMINDER_ACTIONS, CREATE_REMINDER_SLOT_INDEX
     from intent_execution import IntentDispatcher
     from intent_inference import OnnxIntentPredictor
 
@@ -981,7 +986,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         else "OUT_OF_SCOPE"
                     )
                     execution_started = time.perf_counter()
-                    result = dispatcher.execute(dispatch_label)
+                    if dispatch_label == "CREATE_REMINDER":
+                        reminder_action = CREATE_REMINDER_ACTIONS[
+                            prediction.slot_ids[CREATE_REMINDER_SLOT_INDEX]
+                        ]
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=reminder_action,
+                        )
+                    else:
+                        result = dispatcher.execute(dispatch_label)
                     logger.info(
                         "intent execution completed: intent=%s duration_ms=%.1f",
                         dispatch_label,

@@ -19,6 +19,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+if __package__:
+    from .reminder_store import JsonReminderStore, ReminderStoreError
+else:
+    from reminder_store import JsonReminderStore, ReminderStoreError
+
 INTENT_NAMES = (
     "PLAY_MUSIC",
     "WEATHER",
@@ -56,6 +61,9 @@ MUSIC_EXTENSIONS = frozenset(
 MUSIC_VOLUME_STEP = "5%"
 PLAYER_STARTUP_GRACE_SECONDS = 0.2
 PLAYER_STOP_TIMEOUT_SECONDS = 3
+CREATE_REMINDER_ACTIONS = ("Drink water", "Study", "Exercise")
+CREATE_REMINDER_SLOT_INDEX = 5
+REMINDER_LIST_LIMIT = 5
 
 
 class WeatherServiceError(RuntimeError):
@@ -361,11 +369,14 @@ class IntentDispatcher:
     before dispatching an intent.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, reminder_store: JsonReminderStore | None = None) -> None:
         self._gpio_light: GpioLight | None = None
         self._weather_client = OpenWeatherClient()
         self._music_player = LocalMusicPlayer()
         self._output_volume = OutputVolume()
+        self._reminder_store = (
+            reminder_store if reminder_store is not None else JsonReminderStore()
+        )
         self._handlers = {
             "PLAY_MUSIC": self._music_player.play,
             "WEATHER": self._tell_weather,
@@ -383,9 +394,7 @@ class IntentDispatcher:
             "MESSAGE": lambda: self._unavailable(
                 "MESSAGE", "a messaging provider is not configured"
             ),
-            "LIST_REMINDERS": lambda: self._unavailable(
-                "LIST_REMINDERS", "a reminder store is not configured"
-            ),
+            "LIST_REMINDERS": self._list_reminders,
             "TIMER": lambda: self._unavailable(
                 "TIMER", "a timer service is not configured"
             ),
@@ -401,15 +410,18 @@ class IntentDispatcher:
             "COLOR": lambda: self._unavailable(
                 "COLOR", "a color-capable lighting controller is not configured"
             ),
-            "CREATE_REMINDER": lambda: self._unavailable(
-                "CREATE_REMINDER", "a reminder store is not configured"
-            ),
+            "CREATE_REMINDER": lambda: self._create_reminder(None),
             "OUT_OF_SCOPE": lambda: self._rejected(
                 "OUT_OF_SCOPE", "out-of-scope predictions are not executed"
             ),
         }
 
-    def execute(self, intent: str | int) -> ExecutionResult:
+    def execute(
+        self,
+        intent: str | int,
+        *,
+        slot_action: str | None = None,
+    ) -> ExecutionResult:
         """Dispatch a class ID or label from the model's 20-intent contract."""
         if isinstance(intent, bool):
             raise ValueError("intent must be a class ID or intent label")
@@ -426,7 +438,10 @@ class IntentDispatcher:
         handler = self._handlers.get(intent_name)
         if handler is None:
             raise ValueError(f"unknown intent label: {intent_name!r}")
-        result = handler()
+        if intent_name == "CREATE_REMINDER":
+            result = self._create_reminder(slot_action)
+        else:
+            result = handler()
         logger.info(
             "intent execution: intent=%s status=%s message=%s",
             result.intent,
@@ -460,6 +475,48 @@ class IntentDispatcher:
             intent="WEATHER",
             status=ExecutionStatus.COMPLETED,
             message=message,
+        )
+
+    def _create_reminder(self, slot_action: str | None) -> ExecutionResult:
+        action = "Reminder" if slot_action is None else slot_action
+        if slot_action is not None and slot_action not in CREATE_REMINDER_ACTIONS:
+            raise ValueError(f"unsupported reminder action: {slot_action!r}")
+        try:
+            reminder = self._reminder_store.add(action)
+        except ReminderStoreError:
+            logger.exception("could not persist a reminder")
+            raise
+        return ExecutionResult(
+            intent="CREATE_REMINDER",
+            status=ExecutionStatus.COMPLETED,
+            message=f"Reminder added: {reminder.action}.",
+        )
+
+    def _list_reminders(self) -> ExecutionResult:
+        try:
+            reminders = self._reminder_store.list()
+        except ReminderStoreError:
+            logger.exception("could not list reminders")
+            raise
+        if not reminders:
+            return ExecutionResult(
+                intent="LIST_REMINDERS",
+                status=ExecutionStatus.COMPLETED,
+                message="You have no reminders.",
+            )
+
+        visible_actions = [
+            reminder.action for reminder in reminders[:REMINDER_LIST_LIMIT]
+        ]
+        remainder = len(reminders) - len(visible_actions)
+        action_list = "; ".join(visible_actions)
+        if remainder:
+            action_list += f"; and {remainder} more"
+        item_word = "reminder" if len(reminders) == 1 else "reminders"
+        return ExecutionResult(
+            intent="LIST_REMINDERS",
+            status=ExecutionStatus.COMPLETED,
+            message=f"You have {len(reminders)} {item_word}: {action_list}.",
         )
 
     def _set_light(self, enabled: bool) -> ExecutionResult:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import signal
+from datetime import datetime
 from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
@@ -14,6 +15,7 @@ from inference.pi5_runner import intent_execution as execution
 
 def test_dispatcher_covers_all_model_intents(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
     monkeypatch.setattr(
@@ -60,7 +62,9 @@ def test_dispatcher_covers_all_model_intents(
             "test light",
         ),
     )
-    dispatcher = execution.IntentDispatcher()
+    dispatcher = execution.IntentDispatcher(
+        reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json")
+    )
 
     assert len(execution.INTENT_NAMES) == 20
     assert set(dispatcher._handlers) == set(execution.INTENT_NAMES)
@@ -73,17 +77,91 @@ def test_dispatcher_covers_all_model_intents(
             "WEATHER",
             "CALL",
             "MESSAGE",
-            "LIST_REMINDERS",
             "TIMER",
             "ALARM",
             "TEMPERATURE",
             "BRIGHTNESS",
             "COLOR",
-            "CREATE_REMINDER",
         }:
             assert result.status is execution.ExecutionStatus.UNAVAILABLE
         else:
             assert result.status is execution.ExecutionStatus.COMPLETED
+    dispatcher.close()
+
+
+def test_create_and_list_reminders_persist_across_dispatchers(tmp_path) -> None:
+    store_path = tmp_path / "config" / "reminders.json"
+    dispatcher = execution.IntentDispatcher(
+        reminder_store=execution.JsonReminderStore(store_path)
+    )
+
+    empty_result = dispatcher.execute("LIST_REMINDERS")
+    created_result = dispatcher.execute(
+        "CREATE_REMINDER",
+        slot_action="Drink water",
+    )
+    dispatcher.close()
+
+    reloaded_dispatcher = execution.IntentDispatcher(
+        reminder_store=execution.JsonReminderStore(store_path)
+    )
+    listed_result = reloaded_dispatcher.execute("LIST_REMINDERS")
+
+    assert empty_result.status is execution.ExecutionStatus.COMPLETED
+    assert empty_result.message == "You have no reminders."
+    assert created_result.status is execution.ExecutionStatus.COMPLETED
+    assert created_result.message == "Reminder added: Drink water."
+    assert listed_result.status is execution.ExecutionStatus.COMPLETED
+    assert listed_result.message == "You have 1 reminder: Drink water."
+    reminder = execution.JsonReminderStore(store_path).list()[0]
+    assert reminder.id == 1
+    assert reminder.action == "Drink water"
+    assert datetime.fromisoformat(reminder.created_at).utcoffset() is not None
+    reloaded_dispatcher.close()
+
+
+def test_create_reminder_uses_generic_action_without_a_predicted_slot(
+    tmp_path,
+) -> None:
+    dispatcher = execution.IntentDispatcher(
+        reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json")
+    )
+
+    result = dispatcher.execute("CREATE_REMINDER")
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == "Reminder added: Reminder."
+    assert execution.JsonReminderStore(tmp_path / "reminders.json").list()[
+        0
+    ].action == "Reminder"
+    dispatcher.close()
+
+
+def test_create_reminder_rejects_unsupported_slot_action(tmp_path) -> None:
+    dispatcher = execution.IntentDispatcher(
+        reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json")
+    )
+
+    with pytest.raises(ValueError, match="unsupported reminder action"):
+        dispatcher.execute("CREATE_REMINDER", slot_action="Call mom")
+    dispatcher.close()
+
+
+def test_list_reminders_speaks_only_the_latest_five(tmp_path) -> None:
+    store = execution.JsonReminderStore(tmp_path / "reminders.json")
+    dispatcher = execution.IntentDispatcher(reminder_store=store)
+    for action in execution.CREATE_REMINDER_ACTIONS:
+        dispatcher.execute("CREATE_REMINDER", slot_action=action)
+    for action in ("Reminder 4", "Reminder 5", "Reminder 6"):
+        store.add(action)
+
+    result = dispatcher.execute("LIST_REMINDERS")
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == (
+        "You have 6 reminders: Reminder 6; Reminder 5; Reminder 4; "
+        "Exercise; Study; and 1 more."
+    )
     dispatcher.close()
 
 

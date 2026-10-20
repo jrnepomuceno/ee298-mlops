@@ -232,6 +232,20 @@ The currently implemented local actions are:
 | `TIME` | Speak the Pi's local system time using Piper TTS. |
 | `WEATHER` | Speak current conditions in Quezon City using OpenWeather Current Weather API. |
 | `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
+| `CREATE_REMINDER`, `LIST_REMINDERS` | Persist undated reminder actions locally and speak the saved list. |
+
+`CREATE_REMINDER` stores one of the trained actions (`Drink water`, `Study`,
+or `Exercise`) with a local creation timestamp. The model slot does not
+contain a due date or time, so these are persistent list entries, not
+scheduled notifications. If CREATE_REMINDER is forced without an inferred
+slot, the runner stores a generic `Reminder`. `LIST_REMINDERS` speaks at most
+the five newest items and reports how many additional entries remain.
+
+By default, reminders are stored in
+`~/.config/pi5-vcm/reminders.json`. Set `PI5_VCM_REMINDERS_FILE` in the
+service's private environment file to override the location. Writes replace
+the JSON file atomically; malformed or inaccessible store data is reported as
+an error rather than treated as an empty list.
 
 Weather reads the API key from `OPENWEATHER_API_KEY` and queries
 `Quezon City,PH` through OpenWeather's
@@ -286,11 +300,10 @@ coil or other high-load device directly to a Raspberry Pi GPIO. GPIO actions
 require `gpiozero`, which is supplied by the Raspberry Pi OS packages
 installed by `setup_pi.sh`.
 
-Telephony, messaging, reminders, timers, alarms, temperature, brightness, and
-color actions return `unavailable` until their corresponding service or
-hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Slot-based
-intents are included in the dispatch table, but their predicted slot values
-are not yet acted on.
+Telephony, messaging, timers, alarms, temperature, brightness, and color
+actions return `unavailable` until their corresponding service or hardware
+adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Timer, alarm,
+temperature, brightness, and color slot values are not yet acted on.
 
 An inference loop can dispatch a predicted class ID like this:
 
@@ -305,9 +318,10 @@ finally:
     dispatcher.close()
 ```
 
-The model's six slot outputs are decoded, but slot-based actions are not yet
-implemented. The wake-word model files downloaded by setup are stored under
-`models/openwakeword/`; they are not embedded into the Git repository.
+The model's six slot outputs are decoded. CREATE_REMINDER uses its predicted
+action slot; timer, alarm, temperature, brightness, and color slot actions
+remain unimplemented. The wake-word model files downloaded by setup are stored
+under `models/openwakeword/`; they are not embedded into the Git repository.
 
 ## Dependency note
 
