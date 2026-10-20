@@ -92,14 +92,24 @@ install -m 0755 "$HOME/.local/src/QuadcastRGB/dev" \
 The Pi's DuoCast USB ID (`03f0:098c`) is supported by
 [QuadcastRGB](https://github.com/Ors1mer/QuadcastRGB). When enabled, the
 microphone cycles RGB during startup warmup, turns its lights off when warmup
-completes, lights blue when Alexa is detected, changes to green while Piper's
-reply is playing, and turns off after command handling. The GPIO indicator
-remains a simple on/off indicator. If the foreground binary is not on `PATH`
-or in `~/.local/bin/`, set its path explicitly:
+completes, shows the selected interaction color when Alexa is detected, and
+pulses that color while Piper's reply is playing. `COLOR` changes this
+preference to Red, Blue, or Green and stores it across service restarts at
+`~/.config/pi5-vcm/interaction-color.json` (override with
+`PI5_VCM_INTERACTION_COLOR_FILE`). It defaults to Blue. The preference affects
+the DuoCast only; the optional GPIO indicator remains on/off. Standby remains
+off and startup warmup continues cycling. If the foreground binary is not on
+`PATH` or in `~/.local/bin/`, set its path explicitly:
 
 ```bash
 PI5_VCM_RGB_EXECUTABLE=/path/to/quadcastrgb-foreground bash run_pi.sh
 ```
+
+`BRIGHTNESS` sets the DuoCast RGB output to the trained level of 20%, 60%, or
+100%. The selected level applies to subsequent wake acknowledgements and
+spoken-reply pulses for the current runner process; it resets to 100% after a
+service restart. It requires DuoCast RGB control to be enabled. It does not
+change the optional external GPIO indicator.
 
 Set `PI5_VCM_HYPERX_RGB=0` to disable automatic RGB control, or set it to `1`
 to require the utility and fail at startup if it is missing. The utility
@@ -235,6 +245,8 @@ The currently implemented local actions are:
 | `TIMER` | Start a local countdown for 10 seconds, 30 seconds, or 1 minute and speak when it expires. |
 | `ALARM` | Set a one-shot alarm for 6:00 AM, 8:00 AM, or 9:00 PM local device time. |
 | `TEMPERATURE` | Speak confirmation for the selected 18, 22, or 26 degree set point. |
+| `BRIGHTNESS` | Set DuoCast RGB to the selected 20%, 60%, or 100% level when RGB control is enabled. |
+| `COLOR` | Set the persisted DuoCast interaction color to Red, Blue, or Green. |
 | `CREATE_REMINDER`, `LIST_REMINDERS` | Persist undated reminder actions locally and speak the saved list. |
 
 The TIMER slot selects one of the three trained durations. Only one countdown
@@ -255,6 +267,13 @@ speaks “Setting the temperature to {value} degrees.” only; no thermostat
 controller or temperature sensor is configured, so it does not change or
 measure physical temperature. A direct or forced TEMPERATURE dispatch without
 an inferred slot asks the user to choose one of the supported set points.
+
+`COLOR` changes the DuoCast interaction color: wake acknowledgement shows the
+selected color solid, and spoken replies pulse in that color. The selection is
+saved immediately and reused after service restarts. It does not change
+startup cycling or standby-off behavior. The optional GPIO indicator remains
+on/off only. A COLOR confirmation is spoken while the new color pulses when
+DuoCast RGB is enabled.
 
 `CREATE_REMINDER` stores one of the trained actions (`Drink water`, `Study`,
 or `Exercise`) with a local creation timestamp. The model slot does not
@@ -322,12 +341,21 @@ coil or other high-load device directly to a Raspberry Pi GPIO. GPIO actions
 require `gpiozero`, which is supplied by the Raspberry Pi OS packages
 installed by `setup_pi.sh`.
 
-Telephony, messaging, brightness, and color
-actions return `unavailable` until their corresponding service or hardware
-adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Temperature,
-brightness, and color slot values are not yet acted on; TIMER's duration and
-ALARM's time slots are implemented. TEMPERATURE speaks a set-point
-confirmation without controlling hardware.
+For an optional external status LED, connect a low-current LED through a
+series resistor between a supported BCM GPIO and ground. For example, BCM
+GPIO17 is physical header pin 11; a ground connection is physical pin 6.
+Configure it for a one-off run with `PI5_VCM_LED_GPIO=17 bash run_pi.sh`.
+For the systemd service, put `PI5_VCM_LED_GPIO=17` in the private environment
+file before reinstalling the service. The GPIO is only an on/off indicator;
+it is separate from DuoCast brightness and from the `PI5_VCM_LIGHT_GPIO`
+output used by `LIGHT_ON`/`LIGHT_OFF`. Use BCM numbering for configuration,
+not physical header pin numbers.
+
+Telephony and messaging actions return `unavailable` until their corresponding
+service or hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`.
+The BRIGHTNESS slot selects 20%, 60%, or 100%; TIMER's duration, ALARM's time,
+TEMPERATURE's set point, and COLOR's named color slots are also implemented.
+TEMPERATURE speaks a set-point confirmation without controlling hardware.
 
 An inference loop can dispatch a predicted class ID like this:
 
@@ -344,10 +372,10 @@ finally:
 
 The model's six slot outputs are decoded. TIMER uses its predicted duration
 slot, ALARM uses its predicted local clock-time slot, TEMPERATURE speaks its
-predicted set-point slot, and CREATE_REMINDER uses its predicted action slot.
-Brightness and color slot actions remain unimplemented. The wake-word model
-files downloaded by setup are stored under `models/openwakeword/`; they are
-not embedded into the Git repository.
+predicted set-point slot, BRIGHTNESS uses its predicted level slot, COLOR uses
+its predicted named-color slot, and CREATE_REMINDER uses its predicted action
+slot. The wake-word model files downloaded by setup are stored under
+`models/openwakeword/`; they are not embedded into the Git repository.
 
 ## Dependency note
 

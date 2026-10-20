@@ -133,22 +133,88 @@ def test_hyperx_rgb_indicator_runs_warmup_wake_and_off_modes(
     )
     monkeypatch.setattr(runtime.time, "sleep", lambda seconds: None)
 
-    indicator = runtime.HyperxRgbIndicator(executable)
+    color_store = runtime.InteractionColorStore(
+        tmp_path / "interaction-color.json"
+    )
+    indicator = runtime.HyperxRgbIndicator(
+        executable,
+        interaction_color=color_store.load(),
+    )
     indicator.start_warmup()
     indicator.finish_warmup()
     indicator.turn_on()
     indicator.speaking()
+    dispatcher = runtime.IntentDispatcher(
+        interaction_color_store=color_store,
+        interaction_color_callback=indicator.set_interaction_color,
+    )
+    result = dispatcher.execute("COLOR", slot_action="Red")
+    assert result.message == "Interaction color set to red."
+    assert runtime.InteractionColorStore(color_store.path).load() == "Red"
+    indicator.turn_on()
+    indicator.speaking()
     indicator.turn_off()
+    dispatcher.close()
     indicator.close()
 
     assert commands == [
         [str(executable), "-a", "cycle"],
         [str(executable), "-a", "solid", "0"],
-        [str(executable), "-a", "solid", "0000ff"],
-        [str(executable), "-a", "solid", "00ff00"],
+        [str(executable), "-a", "solid", "0000ff", "-b", "100"],
+        [str(executable), "-a", "pulse", "0000ff", "-b", "100"],
+        [str(executable), "-a", "solid", "ff0000", "-b", "100"],
+        [str(executable), "-a", "pulse", "ff0000", "-b", "100"],
         [str(executable), "-a", "solid", "0"],
     ]
-    assert len(stopped) == 5
+    assert len(stopped) == 7
+
+
+def test_hyperx_rgb_indicator_applies_brightness_to_current_and_future_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "quadcastrgb"
+    executable.touch()
+    executable.chmod(0o755)
+    commands: list[list[str]] = []
+
+    class Process:
+        def __init__(self) -> None:
+            self.running = True
+            self.stderr = io.BytesIO()
+
+        def poll(self) -> int | None:
+            return None if self.running else 0
+
+        def terminate(self) -> None:
+            self.running = False
+
+        def wait(self, timeout: float | None = None) -> int:
+            self.running = False
+            return 0
+
+        def kill(self) -> None:
+            self.running = False
+
+    monkeypatch.setattr(
+        "inference.pi5_runner.wake_ack.subprocess.Popen",
+        lambda command, **kwargs: commands.append(command) or Process(),
+    )
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: None)
+
+    indicator = runtime.HyperxRgbIndicator(executable)
+    indicator.turn_on()
+    indicator.set_brightness(60)
+    indicator.speaking()
+    indicator.turn_off()
+    indicator.close()
+
+    assert commands == [
+        [str(executable), "-a", "solid", "0000ff", "-b", "100"],
+        [str(executable), "-a", "solid", "0000ff", "-b", "60"],
+        [str(executable), "-a", "pulse", "0000ff", "-b", "60"],
+        [str(executable), "-a", "solid", "0"],
+    ]
 
 
 def test_main_rearms_after_acknowledgement_until_interrupted(
@@ -996,6 +1062,8 @@ def test_record_command_returns_none_when_no_speech_starts() -> None:
         (True, "TIMER"),
         (True, "ALARM"),
         (True, "TEMPERATURE"),
+        (True, "BRIGHTNESS"),
+        (True, "COLOR"),
     ],
 )
 def test_main_infers_and_dispatches_only_accepted_intents(
@@ -1039,12 +1107,13 @@ def test_main_infers_and_dispatches_only_accepted_intents(
                     "confidence": 0.8,
                     "out_of_scope_confidence": 0.1,
                     "accepted": accepted,
-                    "slot_ids": (1, 0, 2, 0, 0, 2),
+                    "slot_ids": (1, 0, 2, 0, 1, 2),
                 },
             )()
 
     timer_expiry_callbacks = []
     alarm_expiry_callbacks = []
+    color_callbacks = []
 
     class Dispatcher:
         def __init__(
@@ -1052,11 +1121,17 @@ def test_main_infers_and_dispatches_only_accepted_intents(
             *,
             timer_expiry_callback,
             alarm_expiry_callback,
+            interaction_color_store,
+            interaction_color_callback,
+            brightness_callback,
         ) -> None:
+            assert interaction_color_store.load() == "Blue"
             self.timer_expiry_callback = timer_expiry_callback
             timer_expiry_callbacks.append(timer_expiry_callback)
             self.alarm_expiry_callback = alarm_expiry_callback
             alarm_expiry_callbacks.append(alarm_expiry_callback)
+            color_callbacks.append(interaction_color_callback)
+            assert brightness_callback is None
 
         def execute(
             self,
@@ -1100,6 +1175,11 @@ def test_main_infers_and_dispatches_only_accepted_intents(
     monkeypatch.setattr(runtime, "IntentDispatcher", Dispatcher)
     monkeypatch.setattr(
         runtime,
+        "InteractionColorStore",
+        lambda: SimpleNamespace(load=lambda: "Blue"),
+    )
+    monkeypatch.setattr(
+        runtime,
         "SpeechPlayer",
         lambda **kwargs: SimpleNamespace(
             warmup=lambda: events.append("tts-warmup"),
@@ -1128,6 +1208,10 @@ def test_main_infers_and_dispatches_only_accepted_intents(
         expected_slot_action = "6:00 AM"
     elif accepted and intent_label == "TEMPERATURE":
         expected_slot_action = "26 degrees"
+    elif accepted and intent_label == "BRIGHTNESS":
+        expected_slot_action = "20 percent"
+    elif accepted and intent_label == "COLOR":
+        expected_slot_action = "Blue"
     assert f"dispatch:{expected_dispatch}:{expected_slot_action}" in events
     assert events.index("acknowledge") < events.index("record-command")
     assert events.index("record-command") < events.index("predict")
@@ -1136,6 +1220,8 @@ def test_main_infers_and_dispatches_only_accepted_intents(
     if intent_label == "TIMER":
         timer_expiry_callbacks[0]()
         assert events.count("speak:Your timer is up.") == 1
+    if intent_label == "COLOR":
+        assert color_callbacks[0] is None
     if intent_label == "ALARM":
         alarm_expiry_callbacks[0]("It's 6:00 AM.")
         assert events.count("speak:It's 6:00 AM.") == 1

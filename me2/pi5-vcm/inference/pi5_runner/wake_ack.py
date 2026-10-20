@@ -20,12 +20,22 @@ from typing import BinaryIO, Protocol
 import numpy as np
 
 if __package__:
+    from .interaction_color import (
+        COLOR_HEX,
+        DEFAULT_INTERACTION_COLOR,
+        InteractionColorStore,
+    )
     from .intent_execution import INTENT_NAMES as EXECUTION_INTENT_NAMES
     from .intent_execution import (
-        CREATE_REMINDER_ACTIONS,
-        CREATE_REMINDER_SLOT_INDEX,
         ALARM_ACTIONS,
         ALARM_SLOT_INDEX,
+        BRIGHTNESS_ACTIONS,
+        BRIGHTNESS_LEVELS,
+        BRIGHTNESS_SLOT_INDEX,
+        COLOR_NAMES,
+        COLOR_SLOT_INDEX,
+        CREATE_REMINDER_ACTIONS,
+        CREATE_REMINDER_SLOT_INDEX,
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
@@ -35,12 +45,22 @@ if __package__:
     from .intent_execution import IntentDispatcher
     from .intent_inference import OnnxIntentPredictor
 else:
+    from interaction_color import (
+        COLOR_HEX,
+        DEFAULT_INTERACTION_COLOR,
+        InteractionColorStore,
+    )
     from intent_execution import INTENT_NAMES as EXECUTION_INTENT_NAMES
     from intent_execution import (
-        CREATE_REMINDER_ACTIONS,
-        CREATE_REMINDER_SLOT_INDEX,
         ALARM_ACTIONS,
         ALARM_SLOT_INDEX,
+        BRIGHTNESS_ACTIONS,
+        BRIGHTNESS_LEVELS,
+        BRIGHTNESS_SLOT_INDEX,
+        COLOR_NAMES,
+        COLOR_SLOT_INDEX,
+        CREATE_REMINDER_ACTIONS,
+        CREATE_REMINDER_SLOT_INDEX,
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
@@ -83,6 +103,10 @@ class Indicator(Protocol):
     def turn_on(self) -> None: ...
 
     def speaking(self) -> None: ...
+
+    def set_interaction_color(self, color: str) -> None: ...
+
+    def set_brightness(self, brightness: int) -> None: ...
 
     def turn_off(self) -> None: ...
 
@@ -299,6 +323,12 @@ class GpioIndicator:
     def speaking(self) -> None:
         self._led.on()
 
+    def set_interaction_color(self, color: str) -> None:
+        return
+
+    def set_brightness(self, brightness: int) -> None:
+        return
+
     def turn_off(self) -> None:
         self._led.off()
 
@@ -307,15 +337,24 @@ class GpioIndicator:
 
 
 class HyperxRgbIndicator:
-    def __init__(self, executable: Path) -> None:
+    def __init__(
+        self,
+        executable: Path,
+        interaction_color: str = DEFAULT_INTERACTION_COLOR,
+    ) -> None:
         if not executable.is_file() or not executable.stat().st_mode & 0o111:
             raise FileNotFoundError(
                 "foreground QuadcastRGB executable is missing or not executable: "
                 f"{executable}"
             )
+        if interaction_color not in COLOR_HEX:
+            raise ValueError(f"unsupported interaction color: {interaction_color!r}")
         self.executable = executable
+        self.interaction_color = interaction_color
+        self.brightness = 100
         self._process: subprocess.Popen[bytes] | None = None
         self._mode: tuple[str, ...] | None = None
+        self._active_effect: tuple[str, str] | None = None
 
     def start_warmup(self) -> None:
         self._set_mode("-a", "cycle")
@@ -324,12 +363,25 @@ class HyperxRgbIndicator:
         self.turn_off()
 
     def turn_on(self) -> None:
-        self._set_mode("-a", "solid", "0000ff")
+        self._set_effect("solid", COLOR_HEX[self.interaction_color])
 
     def speaking(self) -> None:
-        self._set_mode("-a", "solid", "00ff00")
+        self._set_effect("pulse", COLOR_HEX[self.interaction_color])
+
+    def set_interaction_color(self, color: str) -> None:
+        if color not in COLOR_HEX:
+            raise ValueError(f"unsupported interaction color: {color!r}")
+        self.interaction_color = color
+
+    def set_brightness(self, brightness: int) -> None:
+        if brightness not in BRIGHTNESS_LEVELS:
+            raise ValueError(f"unsupported DuoCast brightness level: {brightness!r}")
+        self.brightness = brightness
+        if self._active_effect is not None:
+            self._set_effect(*self._active_effect)
 
     def turn_off(self) -> None:
+        self._active_effect = None
         self._set_mode("-a", "solid", "0")
 
     def close(self) -> None:
@@ -370,6 +422,16 @@ class HyperxRgbIndicator:
             )
         self._mode = arguments
 
+    def _set_effect(self, mode: str, color: str) -> None:
+        self._set_mode(
+            "-a",
+            mode,
+            color,
+            "-b",
+            str(self.brightness),
+        )
+        self._active_effect = (mode, color)
+
     def _stop(self) -> None:
         process = self._process
         self._process = None
@@ -406,6 +468,14 @@ class CombinedIndicator:
     def speaking(self) -> None:
         for indicator in self._indicators:
             indicator.speaking()
+
+    def set_interaction_color(self, color: str) -> None:
+        for indicator in self._indicators:
+            indicator.set_interaction_color(color)
+
+    def set_brightness(self, brightness: int) -> None:
+        for indicator in self._indicators:
+            indicator.set_brightness(brightness)
 
     def turn_off(self) -> None:
         for indicator in self._indicators:
@@ -868,8 +938,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         datefmt="%Y-%m-%dT%H:%M:%S%z",
     )
     logger = logging.getLogger("pi5_vcm.inference")
+    interaction_color_store = InteractionColorStore()
+    interaction_color = interaction_color_store.load()
     capture = AlsaCapture(device=args.input_device)
     indicator: Indicator | None = None
+    rgb_indicator: HyperxRgbIndicator | None = None
     dispatcher: IntentDispatcher | None = None
     speech_player: SpeechPlayer | None = None
     try:
@@ -878,7 +951,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             indicators.append(GpioIndicator(args.led_gpio))
         hyperx_executable = getattr(args, "hyperx_rgb_executable", None)
         if hyperx_executable is not None:
-            indicators.append(HyperxRgbIndicator(hyperx_executable))
+            rgb_indicator = HyperxRgbIndicator(
+                hyperx_executable,
+                interaction_color=interaction_color,
+            )
+            indicators.append(rgb_indicator)
         indicator = CombinedIndicator(indicators) if indicators else None
         if indicator is not None:
             indicator.start_warmup()
@@ -927,6 +1004,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                         TIMER_EXPIRED_MESSAGE
                     ),
                     alarm_expiry_callback=initialized_speech_player.speak,
+                    interaction_color_store=interaction_color_store,
+                    interaction_color_callback=(
+                        indicator.set_interaction_color
+                        if indicator is not None
+                        else None
+                    ),
+                    brightness_callback=(
+                        rgb_indicator.set_brightness
+                        if rgb_indicator is not None
+                        else None
+                    ),
                 )
         finally:
             if indicator is not None:
@@ -1053,6 +1141,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                         result = dispatcher.execute(
                             dispatch_label,
                             slot_action=TEMPERATURE_ACTIONS[temperature_slot],
+                        )
+                    elif dispatch_label == "COLOR":
+                        color_slot = prediction.slot_ids[COLOR_SLOT_INDEX]
+                        if not 0 <= color_slot < len(COLOR_NAMES):
+                            raise RuntimeError(
+                                f"invalid COLOR slot prediction: {color_slot}"
+                            )
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=COLOR_NAMES[color_slot],
+                        )
+                    elif dispatch_label == "BRIGHTNESS":
+                        brightness_slot = prediction.slot_ids[
+                            BRIGHTNESS_SLOT_INDEX
+                        ]
+                        if not 0 <= brightness_slot < len(BRIGHTNESS_ACTIONS):
+                            raise RuntimeError(
+                                "invalid BRIGHTNESS slot prediction: "
+                                f"{brightness_slot}"
+                            )
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=BRIGHTNESS_ACTIONS[brightness_slot],
                         )
                     else:
                         result = dispatcher.execute(dispatch_label)

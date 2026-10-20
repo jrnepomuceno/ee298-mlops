@@ -22,10 +22,20 @@ from urllib.request import Request, urlopen
 
 if __package__:
     from .countdown_timer import CountdownTimer, TimerScheduler
+    from .interaction_color import (
+        COLOR_NAMES,
+        InteractionColorStore,
+        InteractionColorStoreError,
+    )
     from .reminder_store import JsonReminderStore, ReminderStoreError
     from .wall_clock_alarm import AlarmScheduler, WallClockAlarm
 else:
     from countdown_timer import CountdownTimer, TimerScheduler
+    from interaction_color import (
+        COLOR_NAMES,
+        InteractionColorStore,
+        InteractionColorStoreError,
+    )
     from reminder_store import JsonReminderStore, ReminderStoreError
     from wall_clock_alarm import AlarmScheduler, WallClockAlarm
 
@@ -77,9 +87,13 @@ ALARM_ACTIONS = ("6:00 AM", "8:00 AM", "9:00 PM")
 ALARM_TIMES = ((6, 0), (8, 0), (21, 0))
 ALARM_SLOT_INDEX = 1
 ALARM_EXPIRED_MESSAGE_FORMAT = "It's {time}."
+COLOR_SLOT_INDEX = 4
 TEMPERATURE_ACTIONS = ("18 degrees", "22 degrees", "26 degrees")
 TEMPERATURE_SETPOINTS = (18, 22, 26)
 TEMPERATURE_SLOT_INDEX = 2
+BRIGHTNESS_ACTIONS = ("20 percent", "60 percent", "100 percent")
+BRIGHTNESS_LEVELS = (20, 60, 100)
+BRIGHTNESS_SLOT_INDEX = 3
 
 
 class WeatherServiceError(RuntimeError):
@@ -393,6 +407,9 @@ class IntentDispatcher:
         countdown_timer: TimerScheduler | None = None,
         alarm_expiry_callback: Callable[[str], None] | None = None,
         alarm_scheduler: AlarmScheduler | None = None,
+        interaction_color_store: InteractionColorStore | None = None,
+        interaction_color_callback: Callable[[str], None] | None = None,
+        brightness_callback: Callable[[int], None] | None = None,
     ) -> None:
         self._gpio_light: GpioLight | None = None
         self._weather_client = OpenWeatherClient()
@@ -413,6 +430,13 @@ class IntentDispatcher:
                 self._speak_alarm_expiry(alarm_expiry_callback)
             )
         )
+        self._interaction_color_store = (
+            interaction_color_store
+            if interaction_color_store is not None
+            else InteractionColorStore()
+        )
+        self._interaction_color_callback = interaction_color_callback
+        self._brightness_callback = brightness_callback
         self._handlers = {
             "PLAY_MUSIC": self._music_player.play,
             "WEATHER": self._tell_weather,
@@ -434,12 +458,8 @@ class IntentDispatcher:
             "TIMER": lambda: self._set_timer(None),
             "ALARM": lambda: self._set_alarm(None),
             "TEMPERATURE": lambda: self._set_temperature(None),
-            "BRIGHTNESS": lambda: self._unavailable(
-                "BRIGHTNESS", "a display brightness controller is not configured"
-            ),
-            "COLOR": lambda: self._unavailable(
-                "COLOR", "a color-capable lighting controller is not configured"
-            ),
+            "BRIGHTNESS": lambda: self._set_brightness(None),
+            "COLOR": lambda: self._set_interaction_color(None),
             "CREATE_REMINDER": lambda: self._create_reminder(None),
             "OUT_OF_SCOPE": lambda: self._rejected(
                 "OUT_OF_SCOPE",
@@ -477,6 +497,10 @@ class IntentDispatcher:
             result = self._set_alarm(slot_action)
         elif intent_name == "TEMPERATURE":
             result = self._set_temperature(slot_action)
+        elif intent_name == "COLOR":
+            result = self._set_interaction_color(slot_action)
+        elif intent_name == "BRIGHTNESS":
+            result = self._set_brightness(slot_action)
         else:
             result = handler()
         logger.info(
@@ -572,6 +596,33 @@ class IntentDispatcher:
             message=f"Setting the temperature to {setpoint} degrees.",
         )
 
+    def _set_interaction_color(
+        self,
+        slot_action: str | None,
+    ) -> ExecutionResult:
+        if slot_action is None:
+            return self._rejected("COLOR", "Please choose red, blue, or green.")
+        if not isinstance(slot_action, str):
+            raise ValueError(f"unsupported interaction color: {slot_action!r}")
+        normalized_color = next(
+            (name for name in COLOR_NAMES if name.casefold() == slot_action.casefold()),
+            None,
+        )
+        if normalized_color is None:
+            raise ValueError(f"unsupported interaction color: {slot_action!r}")
+        try:
+            self._interaction_color_store.save(normalized_color)
+        except InteractionColorStoreError:
+            logger.exception("could not save the interaction color")
+            raise
+        if self._interaction_color_callback is not None:
+            self._interaction_color_callback(normalized_color)
+        return ExecutionResult(
+            intent="COLOR",
+            status=ExecutionStatus.COMPLETED,
+            message=f"Interaction color set to {normalized_color.lower()}.",
+        )
+
     @staticmethod
     def _speak_alarm_expiry(
         callback: Callable[[str], None] | None,
@@ -637,6 +688,30 @@ class IntentDispatcher:
             intent=intent,
             status=ExecutionStatus.COMPLETED,
             message=f"GPIO light output {intent.lower().replace('_', ' ')}",
+        )
+
+    def _set_brightness(self, slot_action: str | None) -> ExecutionResult:
+        if slot_action is None:
+            return self._rejected(
+                "BRIGHTNESS", "Please choose 20, 60, or 100 percent."
+            )
+        try:
+            brightness = BRIGHTNESS_LEVELS[
+                BRIGHTNESS_ACTIONS.index(slot_action)
+            ]
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported DuoCast brightness level: {slot_action!r}"
+            ) from exc
+        if self._brightness_callback is None:
+            return self._unavailable(
+                "BRIGHTNESS", "DuoCast RGB brightness control is not configured"
+            )
+        self._brightness_callback(brightness)
+        return ExecutionResult(
+            intent="BRIGHTNESS",
+            status=ExecutionStatus.COMPLETED,
+            message=f"DuoCast brightness set to {brightness} percent.",
         )
 
     @staticmethod

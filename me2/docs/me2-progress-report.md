@@ -99,8 +99,8 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `--dummy-time` and `--dummy-intent INTENT` modes are opt-in and bypass
   inference; they do not use a fabricated ONNX model. The service installer can
   persist either test mode. The Pi service is currently set to persistent
-  `--dummy-intent PLAY_MUSIC`, which dispatches PLAY_MUSIC for every voiced
-  command after Alexa, regardless of the command's words.
+  `--dummy-time`, which dispatches TIME for every voiced command after Alexa,
+  regardless of the command's words.
 - Implemented local music playback from `~/Music` with a supervised `ffplay`
   process. The runner recursively scans supported audio files in
   case-insensitive path order; Play resumes a paused track, Pause suspends it,
@@ -141,13 +141,28 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   does not control a thermostat or read a sensor; neither is configured. A
   missing slot prompts for a supported set point. Validation is pytest-only;
   this has not been tested on the Pi.
-- Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
-  rainbow cycle during warmup, off in standby, blue on wake, green while the
-  spoken reply plays, then off. The existing optional GPIO indicator remains
-  available separately.
+- Updated the wake/reply RGB phases to use a configurable interaction color:
+  the DuoCast shows the saved color on wake and pulses that color during spoken
+  replies. The `COLOR` slot sets Red, Blue, or Green; the selection persists
+  across service restarts at `~/.config/pi5-vcm/interaction-color.json`
+  (overridable by `PI5_VCM_INTERACTION_COLOR_FILE`). Blue is the default.
+  Startup cycling, standby-off behavior, and GPIO on/off indication are
+  unchanged. Pytest coverage only; DuoCast color/pulse behavior has not been
+  validated on the Pi.
+- Implemented `BRIGHTNESS` using the trained 20%, 60%, and 100% slot values.
+  When DuoCast RGB is enabled, the selected level takes effect immediately and
+  applies to later wake acknowledgements and spoken-reply pulses. It is
+  process-local and resets to 100% on service restart. Documented optional
+  external GPIO status LED wiring and BCM-to-physical pin examples; that GPIO
+  remains an on/off indicator, separate from DuoCast brightness. Pi validation
+  remains pending.
+- Deployed optional HyperX DuoCast RGB states using a foreground QuadcastRGB
+  build. Startup cycles RGB, standby is off, and wake/reply colors use the
+  saved interaction color described above. The optional GPIO indicator remains
+  available separately as a simple on/off indicator.
 - Deployed the runner and QuadcastRGB foreground executable to the Raspberry
-  Pi 5. The systemd user service was verified active in persistent PLAY_MUSIC mode
-  with DuoCast audio capture running.
+  Pi 5. The systemd user service was verified active in persistent dummy TIME
+  mode with DuoCast audio capture running.
 - One live wake-to-spoken-WEATHER interaction completed successfully on the
   Pi. Its measured durations were: command capture 4,181 ms (includes the
   spoken command and 800 ms end-of-speech silence); WEATHER execution 367 ms;
@@ -169,16 +184,21 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   line-length checks, and `git diff --check` passed. After implementing
   audio-only TEMPERATURE confirmations, the focused intent-execution and
   wake-runner tests passed: 79 tests. Python compilation, changed-file
-  line-length checks, and `git diff --check` passed.
+  line-length checks, and `git diff --check` passed. After implementing
+  persistent interaction color and COLOR dispatch, focused color-store,
+  dispatcher, and wake-runner tests passed: 95 tests. Python compilation,
+  changed-file line-length checks, and `git diff --check` passed.
+  After implementing BRIGHTNESS, the focused color-store, dispatcher, and
+  wake-runner tests passed: 103 tests. Python compilation and `git diff --check`
+  passed. DuoCast brightness has not yet been validated on-device.
 
 ### Not yet verified or completed
 
 - The ONNX models available on the Pi do not match the predictor's ME2 input,
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
-- The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
-  `BRIGHTNESS`, and `COLOR`; their service or
-  hardware adapters are not configured. `OUT_OF_SCOPE` remains rejected and
+- The dispatcher currently returns `unavailable` for `CALL` and `MESSAGE`;
+  their service adapters are not configured. `OUT_OF_SCOPE` remains rejected and
   now speaks a friendly retry prompt.
 - Reminder behavior has only been verified with pytest. It still needs
   on-device validation when the Pi is available.
@@ -186,12 +206,14 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   validation when the Pi is available.
 - Alarm behavior has only been verified with pytest. It still needs on-device
   validation when the Pi is available.
+- Interaction color selection and persistence have only been verified with
+  pytest. DuoCast rendering still needs on-device validation.
 - `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin; their real-device
   behavior has not been validated on the Pi in this progress update.
-- Persistent `--dummy-intent PLAY_MUSIC` is a test/demo mode, not model-routed
-  inference: it dispatches PLAY_MUSIC after every voiced command regardless
-  of what was said. Real ME2 inference remains blocked on a compatible exported
-  model and its paired `mel_stats.npz`.
+- Persistent `--dummy-time` on the Pi is a test/demo mode, not model-routed
+  inference: it dispatches TIME after every voiced command regardless of what
+  was said. Real ME2 inference remains blocked on a compatible exported model
+  and its paired `mel_stats.npz`.
 - One live WEATHER interaction has been timed, but latency percentiles and the
   Phase 1 benchmark requirements have not been measured.
 

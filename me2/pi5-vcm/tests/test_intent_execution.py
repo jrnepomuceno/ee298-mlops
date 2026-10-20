@@ -37,6 +37,17 @@ class FakeAlarmScheduler:
         self.closed = True
 
 
+class FakeInteractionColorStore:
+    def __init__(self, color: str = "Blue") -> None:
+        self.color = color
+
+    def load(self) -> str:
+        return self.color
+
+    def save(self, color: str) -> None:
+        self.color = color
+
+
 def test_dispatcher_covers_all_model_intents(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -88,10 +99,12 @@ def test_dispatcher_covers_all_model_intents(
     )
     timer = FakeCountdownTimer()
     alarm = FakeAlarmScheduler()
+    interaction_color_store = FakeInteractionColorStore()
     dispatcher = execution.IntentDispatcher(
         reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json"),
         countdown_timer=timer,
         alarm_scheduler=alarm,
+        interaction_color_store=interaction_color_store,
     )
 
     assert len(execution.INTENT_NAMES) == 20
@@ -112,10 +125,14 @@ def test_dispatcher_covers_all_model_intents(
             "WEATHER",
             "CALL",
             "MESSAGE",
-            "BRIGHTNESS",
-            "COLOR",
         }:
             assert result.status is execution.ExecutionStatus.UNAVAILABLE
+        elif intent_name == "BRIGHTNESS":
+            assert result.status is execution.ExecutionStatus.REJECTED
+            assert result.message == "Please choose 20, 60, or 100 percent."
+        elif intent_name == "COLOR":
+            assert result.status is execution.ExecutionStatus.REJECTED
+            assert result.message == "Please choose red, blue, or green."
         else:
             assert result.status is execution.ExecutionStatus.COMPLETED
     dispatcher.close()
@@ -233,6 +250,105 @@ def test_temperature_rejects_unsupported_setpoint() -> None:
 
     with pytest.raises(ValueError, match="unsupported temperature set point"):
         dispatcher.execute("TEMPERATURE", slot_action="24 degrees")
+
+    dispatcher.close()
+
+
+@pytest.mark.parametrize(
+    ("action", "brightness"),
+    [
+        ("20 percent", 20),
+        ("60 percent", 60),
+        ("100 percent", 100),
+    ],
+)
+def test_brightness_updates_duocast_setting(
+    action: str,
+    brightness: int,
+) -> None:
+    updates: list[int] = []
+    dispatcher = execution.IntentDispatcher(brightness_callback=updates.append)
+
+    result = dispatcher.execute("BRIGHTNESS", slot_action=action)
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == f"DuoCast brightness set to {brightness} percent."
+    assert updates == [brightness]
+    dispatcher.close()
+
+
+def test_brightness_without_slot_prompts_for_supported_level() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    result = dispatcher.execute("BRIGHTNESS")
+
+    assert result.status is execution.ExecutionStatus.REJECTED
+    assert result.message == "Please choose 20, 60, or 100 percent."
+    dispatcher.close()
+
+
+def test_brightness_is_unavailable_without_duocast_rgb() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    result = dispatcher.execute("BRIGHTNESS", slot_action="60 percent")
+
+    assert result.status is execution.ExecutionStatus.UNAVAILABLE
+    assert result.message == "DuoCast RGB brightness control is not configured"
+    dispatcher.close()
+
+
+def test_brightness_rejects_unsupported_level() -> None:
+    dispatcher = execution.IntentDispatcher(brightness_callback=lambda _: None)
+
+    with pytest.raises(ValueError, match="unsupported DuoCast brightness level"):
+        dispatcher.execute("BRIGHTNESS", slot_action="80 percent")
+
+    dispatcher.close()
+
+
+@pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        ("Red", "Red"),
+        ("BLUE", "Blue"),
+        ("green", "Green"),
+    ],
+)
+def test_color_selection_is_persisted_and_updates_indicator(
+    action: str,
+    expected: str,
+) -> None:
+    store = FakeInteractionColorStore()
+    updates: list[str] = []
+    dispatcher = execution.IntentDispatcher(
+        interaction_color_store=store,
+        interaction_color_callback=updates.append,
+    )
+
+    result = dispatcher.execute("COLOR", slot_action=action)
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == f"Interaction color set to {expected.lower()}."
+    assert store.color == expected
+    assert updates == [expected]
+    dispatcher.close()
+
+
+def test_color_selection_without_slot_is_rejected() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    result = dispatcher.execute("COLOR")
+
+    assert result.status is execution.ExecutionStatus.REJECTED
+    assert result.message == "Please choose red, blue, or green."
+    dispatcher.close()
+
+
+def test_color_selection_rejects_unsupported_color() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    with pytest.raises(ValueError, match="unsupported interaction color"):
+        dispatcher.execute("COLOR", slot_action="purple")
 
     dispatcher.close()
 
