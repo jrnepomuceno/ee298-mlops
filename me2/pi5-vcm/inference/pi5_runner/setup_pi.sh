@@ -7,6 +7,9 @@ ASSET_DIR="$SCRIPT_DIR/models/openwakeword"
 TTS_ASSET_DIR="$SCRIPT_DIR/models/tts"
 PYTHON_BIN="${PYTHON:-python3}"
 CONFIG_DIR="$SCRIPT_DIR/.config"
+UV_VERSION="0.12.19"
+UV_INSTALL_DIR="$SCRIPT_DIR/.tools"
+UV_BIN="${UV:-}"
 
 fail() {
     printf 'Pi 5 inference setup failed: %s\n' "$*" >&2
@@ -18,35 +21,56 @@ command -v arecord >/dev/null || fail "install ALSA utilities first (sudo apt in
 command -v aplay >/dev/null || fail "install ALSA utilities first (sudo apt install alsa-utils)"
 command -v curl >/dev/null || fail "curl is required to fetch the pinned wake-word assets"
 command -v sha256sum >/dev/null || fail "sha256sum is required to verify downloaded assets"
+[[ -f "$SCRIPT_DIR/pyproject.toml" && -f "$SCRIPT_DIR/uv.lock" ]] \
+    || fail "the runner's uv project files are missing; rebuild the deployment package"
 
 "$PYTHON_BIN" -c 'import sys; sys.exit(0 if (3, 10) <= sys.version_info[:2] < (3, 14) else 1)' \
     || fail "Python 3.10–3.13 is required; detected $("$PYTHON_BIN" --version 2>&1)"
 
-if ! "$PYTHON_BIN" -m venv --help >/dev/null 2>&1; then
-    fail "Python venv support is missing; install it with sudo apt install python3-venv"
+if [[ -z "$UV_BIN" ]] && command -v uv >/dev/null 2>&1; then
+    if uv --version | grep -Fq "$UV_VERSION"; then
+        UV_BIN="$(command -v uv)"
+    fi
 fi
+if [[ -z "$UV_BIN" && -x "$UV_INSTALL_DIR/uv" ]]; then
+    if "$UV_INSTALL_DIR/uv" --version | grep -Fq "$UV_VERSION"; then
+        UV_BIN="$UV_INSTALL_DIR/uv"
+    fi
+fi
+
+if [[ -z "$UV_BIN" ]]; then
+    UV_INSTALLER="$(mktemp)"
+    if ! curl --fail --location --silent --show-error \
+        "https://astral.sh/uv/${UV_VERSION}/install.sh" \
+        --output "$UV_INSTALLER"; then
+        rm -f -- "$UV_INSTALLER"
+        fail "could not download the pinned uv installer"
+    fi
+    if ! UV_INSTALL_DIR="$UV_INSTALL_DIR" UV_VERSION="$UV_VERSION" \
+        sh "$UV_INSTALLER"; then
+        rm -f -- "$UV_INSTALLER"
+        fail "could not install uv ${UV_VERSION}"
+    fi
+    rm -f -- "$UV_INSTALLER"
+    UV_BIN="$UV_INSTALL_DIR/uv"
+fi
+
+[[ -x "$UV_BIN" ]] || fail "uv executable is missing or not executable: $UV_BIN"
+"$UV_BIN" --version | grep -Fq "$UV_VERSION" \
+    || fail "uv ${UV_VERSION} is required; install that version or unset UV to use the bundled bootstrap"
 
 mkdir -p "$(dirname -- "$VENV_DIR")" "$ASSET_DIR" "$CONFIG_DIR"
 mkdir -p "$TTS_ASSET_DIR"
-"$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR"
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    "$UV_BIN" venv --python "$PYTHON_BIN" --system-site-packages "$VENV_DIR"
+fi
 export PYTHONNOUSERSITE=1
 
-"$VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade pip
-
-# openWakeWord declares tflite-runtime as a Linux dependency, but this runtime
-# uses its ONNX backend; install only the dependencies required for that path.
-"$VENV_DIR/bin/python" -m pip install --disable-pip-version-check \
-    --ignore-installed \
-    "numpy>=1.23,<3" \
-    "onnxruntime>=1.10,<2" \
-    "scipy>=1.3,<2" \
-    "scikit-learn>=1,<2" \
-    "requests>=2,<3" \
-    "tqdm>=4,<5"
-"$VENV_DIR/bin/python" -m pip install --disable-pip-version-check \
-    --no-deps "openwakeword==0.6.0"
-"$VENV_DIR/bin/python" -m pip install --disable-pip-version-check \
-    "piper-tts==1.8.0"
+"$UV_BIN" sync \
+    --project "$SCRIPT_DIR" \
+    --python "$VENV_DIR/bin/python" \
+    --no-dev \
+    --locked
 "$VENV_DIR/bin/python" -m piper.download_voices \
     --data-dir "$TTS_ASSET_DIR" en_US-lessac-medium
 [[ -s "$TTS_ASSET_DIR/en_US-lessac-medium.onnx" ]] \

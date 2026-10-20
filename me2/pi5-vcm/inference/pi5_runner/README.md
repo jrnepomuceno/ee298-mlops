@@ -46,7 +46,7 @@ devices unless you configure overrides. Install host packages before running
 the installer:
 
 ```bash
-sudo apt install alsa-utils python3-venv curl
+sudo apt install alsa-utils curl
 ```
 
 Connect and configure a microphone and speaker visible to ALSA. To select
@@ -88,14 +88,17 @@ bash setup_pi.sh
 ```
 
 The setup script creates a Python virtual environment, installs the pinned
-openWakeWord release with its ONNX runtime dependencies, downloads the Alexa
-and shared feature ONNX models from the upstream `v0.5.1` release, and verifies
-their SHA-256 hashes. It requires 64-bit Raspberry Pi OS, Python 3.10–3.13,
-ALSA capture/playback utilities, and `curl`. Python packages and downloaded
-wake models live in this folder's `.venv/` and `models/`; ALSA drivers and
-optional audio/GPIO services are supplied by the host OS. Setup does not scan
-for, configure, or require a specific microphone, speaker, PipeWire server, or
-GPIO package.
+The setup script bootstraps pinned `uv` 0.12.19 into `.tools/` when the matching
+version is not already on `PATH`, creates a Python virtual environment, and
+installs the locked dependencies with `uv sync`. The lockfile excludes only
+OpenWakeWord's unused `tflite-runtime` dependency; this runner uses its ONNX
+backend. Setup then downloads the Alexa and shared feature ONNX models from
+upstream `v0.5.1` and verifies their SHA-256 hashes. It requires 64-bit
+Raspberry Pi OS, Python 3.10–3.13, ALSA capture/playback utilities, and `curl`.
+Python packages and downloaded wake models live in this folder's `.venv/` and
+`models/`; ALSA drivers and optional audio/GPIO services are supplied by the
+host OS. Setup does not scan for, configure, or require a specific microphone,
+speaker, PipeWire server, or GPIO package.
 
 Start listening after setup:
 

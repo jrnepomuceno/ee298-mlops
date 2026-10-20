@@ -44,13 +44,15 @@ ARCHIVE="$OUTPUT_DIR/pi5-vcm-inference-${PACKAGE_VERSION}.tar.gz"
 TEMP_ARCHIVE="$(mktemp "$OUTPUT_DIR/.pi5-vcm-inference.XXXXXX")"
 trap 'rm -f -- "$TEMP_ARCHIVE"' EXIT
 
-tar -czf "$TEMP_ARCHIVE" \
+COPYFILE_DISABLE=1 tar -czf "$TEMP_ARCHIVE" \
     --exclude="$PACKAGE_DIR_NAME/.venv" \
     --exclude="$PACKAGE_DIR_NAME/models" \
     --exclude="$PACKAGE_DIR_NAME/.config" \
+    --exclude="$PACKAGE_DIR_NAME/.tools" \
     --exclude="$PACKAGE_DIR_NAME/dist" \
     --exclude="$PACKAGE_DIR_NAME/wireplumber" \
     --exclude='*/__pycache__' \
+    --exclude='*/._*' \
     --exclude='*.pyc' \
     --exclude='.DS_Store' \
     -C "$PARENT_DIR" "$PACKAGE_DIR_NAME"
