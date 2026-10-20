@@ -197,9 +197,51 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - The ONNX models available on the Pi do not match the predictor's ME2 input,
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
-- The dispatcher currently returns `unavailable` for `CALL` and `MESSAGE`;
-  their service adapters are not configured. `OUT_OF_SCOPE` remains rejected and
-  now speaks a friendly retry prompt.
+- Added an opt-in Baresip adapter for `CALL` and `MESSAGE`. It uses Baresip's
+  `contact.so` commands through a persistent local JSON-netstring `ctrl_tcp`
+  connection. CALL dials the configured current contact and pauses wake capture
+  after stopping `arecord`, allowing Baresip's configured ALSA source to take
+  the DuoCast microphone until a call-closed event; MESSAGE submits a fixed
+  `PI5_VCM_MESSAGE_TEXT` body to that contact. Baresip startup requires
+  `PI5_VCM_BARESIP_ENABLED=1`, `alsa.so`, `contact.so`, `ctrl_tcp.so`, an
+  `audio_source` matching the runner's ALSA microphone, and the strictly
+  loopback-only listener `127.0.0.1:4444`. The called device can end the demo
+  call; wake capture resumes after Baresip reports the call closed. For one
+  authorized on-device MESSAGE smoke test, these Baresip settings were applied
+  temporarily and the latest dispatcher was run from an isolated temporary
+  package. Exactly one `MESSAGE` intent submitted the authorized fixed text to
+  the URI selected by `~/.baresip/current_contact`; Baresip's local command
+  handler accepted it, but recipient delivery was not independently confirmed.
+  The prior Baresip configuration was restored, temporary files were removed,
+  and the existing inference service was restarted and verified active in its
+  prior dummy-TIME mode. A second explicitly authorized smoke test confirmed
+  the then-current contact fingerprint before dispatch and submitted exactly
+  one `Hello World!` message; the intent's prior `completed` result only
+  reflected ctrl_tcp acceptance, not SIP response or recipient delivery.
+  Dispatcher reporting now uses `submitted` with an explicit unconfirmed-
+  delivery message for this outcome. Baresip's prior broad `0.0.0.0:4444`
+  listener was restored after testing; it was only changed temporarily to
+  loopback for control connection. The inference service and DuoCast `arecord`
+  capture were verified active afterward. No call was placed. On-device CALL
+  and microphone handoff remain untested. `OUT_OF_SCOPE` remains rejected and
+  speaks a friendly retry prompt.
+- Deployed the MESSAGE reporting fix and its Baresip adapter to the active Pi
+  runner package. Verified the deployed dispatcher returns `submitted` with
+  delivery unconfirmed using a fake client; no SIP traffic was sent. The
+  existing inference service restarted successfully and remains in its prior
+  `--dummy-time` mode with DuoCast microphone capture active. A mode-600 rollback
+  copy of the Pi's previous dispatcher is retained under
+  `~/.local/state/pi5-vcm/deploy-backups/`.
+- A direct Pi test later confirmed that
+  `baresip -f ~/.baresip -e "/message text message here" -t 8` delivered the
+  message to the configured current contact. The local source adapter now uses
+  this one-shot command for the MESSAGE intent instead of the asynchronous
+  `ctrl_tcp` command; this source update has not yet been deployed to the Pi.
+  The intent still reports `submitted`, not delivered,
+  because the command exit does not guarantee SIP-level acceptance or
+  recipient delivery. If the runner owns a background Baresip process, it
+  stops that process around the one-shot command and restarts it; it will not
+  launch a duplicate alongside an externally managed Baresip process.
 - Reminder behavior has only been verified with pytest. It still needs
   on-device validation when the Pi is available.
 - Timer behavior has only been verified with pytest. It still needs on-device

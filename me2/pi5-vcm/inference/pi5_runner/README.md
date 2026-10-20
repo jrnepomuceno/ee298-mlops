@@ -229,9 +229,10 @@ dummy mode off.
 
 The dispatcher accepts either a class ID (0–19) or an intent label using the
 ME2 20-class order. The caller must apply the selected model's out-of-scope
-threshold before dispatch. The dispatcher returns an `ExecutionResult` with
-`completed`, `unavailable`, or `rejected` status; it does not treat a missing
-integration as a successful action.
+threshold before dispatch. The dispatcher returns an `ExecutionResult` with `completed`, `submitted`,
+`unavailable`, or `rejected` status; it does not treat a missing integration as
+a successful action. `submitted` means an external provider accepted a request
+for processing; it does not imply the resulting action or delivery completed.
 
 The currently implemented local actions are:
 
@@ -248,6 +249,8 @@ The currently implemented local actions are:
 | `BRIGHTNESS` | Set DuoCast RGB to the selected 20%, 60%, or 100% level when RGB control is enabled. |
 | `COLOR` | Set the persisted DuoCast interaction color to Red, Blue, or Green. |
 | `CREATE_REMINDER`, `LIST_REMINDERS` | Persist undated reminder actions locally and speak the saved list. |
+| `CALL` | Dial the Baresip current contact when the opt-in local control integration is enabled. |
+| `MESSAGE` | Submit the configured fixed message text to the Baresip current contact. |
 
 The TIMER slot selects one of the three trained durations. Only one countdown
 is active at a time; setting another replaces the current timer. It runs
@@ -351,11 +354,57 @@ it is separate from DuoCast brightness and from the `PI5_VCM_LIGHT_GPIO`
 output used by `LIGHT_ON`/`LIGHT_OFF`. Use BCM numbering for configuration,
 not physical header pin numbers.
 
-Telephony and messaging actions return `unavailable` until their corresponding
-service or hardware adapter is configured. `OUT_OF_SCOPE` returns `rejected`.
-The BRIGHTNESS slot selects 20%, 60%, or 100%; TIMER's duration, ALARM's time,
-TEMPERATURE's set point, and COLOR's named color slots are also implemented.
-TEMPERATURE speaks a set-point confirmation without controlling hardware.
+`CALL` uses Baresip's `contact.so` commands through its JSON-netstring
+`ctrl_tcp` module. MESSAGE uses Baresip's `-e` command-line option to submit
+`/message <text>` to the configured current contact. Configure Baresip on the Pi
+before enabling the integration:
+
+```text
+module alsa.so
+module_app contact.so
+module_app ctrl_tcp.so
+audio_source alsa,default:CARD=DuoCast
+ctrl_tcp_listen 127.0.0.1:4444
+```
+
+Keep the listener on loopback; do not expose the control port on a LAN
+interface. `audio_source` must point to the same ALSA capture device used by
+the runner (`PI5_VCM_INPUT_DEVICE`, default `default:CARD=DuoCast`). This lets
+Baresip acquire the DuoCast microphone for the SIP call. Baresip must have a
+current contact selected. Its existing account configuration remains in
+`~/.baresip/accounts`.
+
+To have the inference runner start Baresip in the background and stop the
+process it started when the runner exits, put these lines in the private
+`~/.config/pi5-vcm/environment` file:
+
+```text
+PI5_VCM_BARESIP_ENABLED=1
+PI5_VCM_MESSAGE_TEXT="Demo message configured privately"
+```
+
+The integration is disabled by default. With it enabled, CALL starts or
+connects to Baresip, validates the module and loopback-listener configuration,
+and keeps one control connection open for call-state events. CALL dials
+Baresip's current contact. The runner stops its `arecord` capture before
+dialing, so it releases the shared microphone for Baresip; it does not capture
+VCM commands during the call. Once Baresip reports that the call closed, the
+runner resumes wake-word capture. The called device can end the demo call.
+MESSAGE runs `baresip -f ~/.baresip -e "/message <configured text>" -t 8` as a
+one-shot command. If the runner owns a background Baresip process, it stops that
+process for the command and restarts it afterward; it refuses to start a second
+instance when connected to an externally managed process. Message text is fixed
+by `PI5_VCM_MESSAGE_TEXT`, not transcribed or generated from command audio.
+Baresip's successful local command does not confirm SIP server acceptance or
+recipient delivery, so the intent reports `submitted` with delivery explicitly
+unconfirmed. If Baresip or the message text is not configured, the intent
+reports `unavailable`. Tests mock the process invocation and control socket;
+they do not start Baresip or send calls/messages.
+
+`OUT_OF_SCOPE` returns `rejected`. The BRIGHTNESS slot selects 20%, 60%, or
+100%; TIMER's duration, ALARM's time, TEMPERATURE's set point, and COLOR's
+named color slots are also implemented. TEMPERATURE speaks a set-point
+confirmation without controlling hardware.
 
 An inference loop can dispatch a predicted class ID like this:
 

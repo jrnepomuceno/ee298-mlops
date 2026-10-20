@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 if __package__:
+    from .baresip import BaresipClient, BaresipError, message_text_from_environment
     from .countdown_timer import CountdownTimer, TimerScheduler
     from .interaction_color import (
         COLOR_NAMES,
@@ -30,6 +31,7 @@ if __package__:
     from .reminder_store import JsonReminderStore, ReminderStoreError
     from .wall_clock_alarm import AlarmScheduler, WallClockAlarm
 else:
+    from baresip import BaresipClient, BaresipError, message_text_from_environment
     from countdown_timer import CountdownTimer, TimerScheduler
     from interaction_color import (
         COLOR_NAMES,
@@ -358,6 +360,7 @@ class OutputVolume:
 
 class ExecutionStatus(str, Enum):
     COMPLETED = "completed"
+    SUBMITTED = "submitted"
     UNAVAILABLE = "unavailable"
     REJECTED = "rejected"
 
@@ -410,7 +413,14 @@ class IntentDispatcher:
         interaction_color_store: InteractionColorStore | None = None,
         interaction_color_callback: Callable[[str], None] | None = None,
         brightness_callback: Callable[[int], None] | None = None,
+        baresip_client: BaresipClient | None = None,
+        baresip_audio_device: str | None = None,
     ) -> None:
+        self._baresip_client = (
+            baresip_client
+            if baresip_client is not None
+            else BaresipClient(audio_device=baresip_audio_device)
+        )
         self._gpio_light: GpioLight | None = None
         self._weather_client = OpenWeatherClient()
         self._music_player = LocalMusicPlayer()
@@ -448,12 +458,8 @@ class IntentDispatcher:
             "NEXT": self._music_player.next_track,
             "VOLUME_UP": lambda: self._output_volume.adjust("VOLUME_UP", "up"),
             "VOLUME_DOWN": lambda: self._output_volume.adjust("VOLUME_DOWN", "down"),
-            "CALL": lambda: self._unavailable(
-                "CALL", "a telephony provider is not configured"
-            ),
-            "MESSAGE": lambda: self._unavailable(
-                "MESSAGE", "a messaging provider is not configured"
-            ),
+            "CALL": self._call_current_contact,
+            "MESSAGE": self._message_current_contact,
             "LIST_REMINDERS": self._list_reminders,
             "TIMER": lambda: self._set_timer(None),
             "ALARM": lambda: self._set_alarm(None),
@@ -515,9 +521,47 @@ class IntentDispatcher:
         self._countdown_timer.close()
         self._alarm_scheduler.close()
         self._music_player.close()
+        self._baresip_client.close()
         if self._gpio_light is not None:
             self._gpio_light.close()
             self._gpio_light = None
+
+    def wait_for_call_end(self) -> None:
+        self._baresip_client.wait_for_call_end()
+
+    def _call_current_contact(self) -> ExecutionResult:
+        try:
+            self._baresip_client.dial_current_contact()
+        except BaresipError as exc:
+            logger.warning("CALL action unavailable: %s", exc)
+            return self._unavailable(
+                "CALL", "Baresip is unavailable or the current contact is not set."
+            )
+        return ExecutionResult(
+            "CALL",
+            ExecutionStatus.COMPLETED,
+            "Calling your current contact.",
+        )
+
+    def _message_current_contact(self) -> ExecutionResult:
+        try:
+            body = message_text_from_environment()
+            if body is None:
+                return self._unavailable(
+                    "MESSAGE",
+                    "Configure PI5_VCM_MESSAGE_TEXT before sending a message.",
+                )
+            self._baresip_client.send_message(body)
+        except BaresipError as exc:
+            logger.warning("MESSAGE action unavailable: %s", exc)
+            return self._unavailable(
+                "MESSAGE", "Baresip messaging is unavailable or not configured."
+            )
+        return ExecutionResult(
+            "MESSAGE",
+            ExecutionStatus.SUBMITTED,
+            "Baresip accepted the message request. Delivery is unconfirmed.",
+        )
 
     def _tell_weather(self) -> ExecutionResult:
         try:

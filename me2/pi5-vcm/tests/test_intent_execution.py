@@ -142,6 +142,50 @@ def test_dispatcher_covers_all_model_intents(
     assert alarm.closed
 
 
+def test_call_and_message_dispatch_to_baresip_with_configured_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeBaresipClient(execution.BaresipClient):
+        def __init__(self) -> None:
+            super().__init__(enabled=False)
+            self.dialed = False
+            self.messages: list[str] = []
+            self.waited_for_call_end = False
+            self.closed = False
+
+        def dial_current_contact(self) -> None:
+            self.dialed = True
+
+        def send_message(self, body: str) -> None:
+            self.messages.append(body)
+
+        def wait_for_call_end(self) -> None:
+            self.waited_for_call_end = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setenv("PI5_VCM_MESSAGE_TEXT", "Meet me at 5.")
+    client = FakeBaresipClient()
+    dispatcher = execution.IntentDispatcher(baresip_client=client)
+
+    call_result = dispatcher.execute("CALL")
+    message_result = dispatcher.execute("MESSAGE")
+    dispatcher.wait_for_call_end()
+    dispatcher.close()
+
+    assert call_result.status is execution.ExecutionStatus.COMPLETED
+    assert call_result.message == "Calling your current contact."
+    assert message_result.status is execution.ExecutionStatus.SUBMITTED
+    assert message_result.message == (
+        "Baresip accepted the message request. Delivery is unconfirmed."
+    )
+    assert client.dialed
+    assert client.messages == ["Meet me at 5."]
+    assert client.waited_for_call_end
+    assert client.closed
+
+
 @pytest.mark.parametrize(
     ("action", "seconds"),
     [
