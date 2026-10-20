@@ -25,6 +25,18 @@ class FakeCountdownTimer:
         self.closed = True
 
 
+class FakeAlarmScheduler:
+    def __init__(self) -> None:
+        self.alarms: list[tuple[int, int]] = []
+        self.closed = False
+
+    def start_alarm(self, hour: int, minute: int):
+        self.alarms.append((hour, minute))
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def test_dispatcher_covers_all_model_intents(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -75,9 +87,11 @@ def test_dispatcher_covers_all_model_intents(
         ),
     )
     timer = FakeCountdownTimer()
+    alarm = FakeAlarmScheduler()
     dispatcher = execution.IntentDispatcher(
         reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json"),
         countdown_timer=timer,
+        alarm_scheduler=alarm,
     )
 
     assert len(execution.INTENT_NAMES) == 20
@@ -95,7 +109,6 @@ def test_dispatcher_covers_all_model_intents(
             "WEATHER",
             "CALL",
             "MESSAGE",
-            "ALARM",
             "TEMPERATURE",
             "BRIGHTNESS",
             "COLOR",
@@ -106,6 +119,8 @@ def test_dispatcher_covers_all_model_intents(
     dispatcher.close()
     assert timer.durations == [10]
     assert timer.closed
+    assert alarm.alarms == [(6, 0)]
+    assert alarm.closed
 
 
 @pytest.mark.parametrize(
@@ -138,6 +153,46 @@ def test_timer_rejects_unsupported_duration() -> None:
         dispatcher.execute("TIMER", slot_action="2 hours")
 
     dispatcher.close()
+
+
+@pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        ("6:00 AM", (6, 0)),
+        ("8:00 AM", (8, 0)),
+        ("9:00 PM", (21, 0)),
+    ],
+)
+def test_alarm_starts_at_selected_time(action: str, expected: tuple[int, int]) -> None:
+    alarm = FakeAlarmScheduler()
+    dispatcher = execution.IntentDispatcher(alarm_scheduler=alarm)
+
+    result = dispatcher.execute("ALARM", slot_action=action)
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == f"Alarm set for {action}."
+    assert alarm.alarms == [expected]
+    dispatcher.close()
+
+
+def test_alarm_rejects_unsupported_time() -> None:
+    dispatcher = execution.IntentDispatcher(
+        alarm_scheduler=FakeAlarmScheduler()
+    )
+
+    with pytest.raises(ValueError, match="unsupported alarm time"):
+        dispatcher.execute("ALARM", slot_action="7:30 AM")
+
+    dispatcher.close()
+
+
+def test_alarm_expiry_speech_includes_local_target_time() -> None:
+    speech: list[str] = []
+    notify = execution.IntentDispatcher._speak_alarm_expiry(speech.append)
+
+    notify(datetime(2026, 10, 20, 6, 0))
+
+    assert speech == ["It's 6:00 AM."]
 
 
 def test_create_and_list_reminders_persist_across_dispatchers(tmp_path) -> None:

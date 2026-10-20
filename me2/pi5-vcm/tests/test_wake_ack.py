@@ -994,6 +994,7 @@ def test_record_command_returns_none_when_no_speech_starts() -> None:
         (False, "WEATHER"),
         (True, "CREATE_REMINDER"),
         (True, "TIMER"),
+        (True, "ALARM"),
     ],
 )
 def test_main_infers_and_dispatches_only_accepted_intents(
@@ -1042,11 +1043,19 @@ def test_main_infers_and_dispatches_only_accepted_intents(
             )()
 
     timer_expiry_callbacks = []
+    alarm_expiry_callbacks = []
 
     class Dispatcher:
-        def __init__(self, *, timer_expiry_callback) -> None:
+        def __init__(
+            self,
+            *,
+            timer_expiry_callback,
+            alarm_expiry_callback,
+        ) -> None:
             self.timer_expiry_callback = timer_expiry_callback
             timer_expiry_callbacks.append(timer_expiry_callback)
+            self.alarm_expiry_callback = alarm_expiry_callback
+            alarm_expiry_callbacks.append(alarm_expiry_callback)
 
         def execute(
             self,
@@ -1114,6 +1123,8 @@ def test_main_infers_and_dispatches_only_accepted_intents(
         expected_slot_action = "Exercise"
     elif accepted and intent_label == "TIMER":
         expected_slot_action = "30 seconds"
+    elif accepted and intent_label == "ALARM":
+        expected_slot_action = "6:00 AM"
     assert f"dispatch:{expected_dispatch}:{expected_slot_action}" in events
     assert events.index("acknowledge") < events.index("record-command")
     assert events.index("record-command") < events.index("predict")
@@ -1122,5 +1133,8 @@ def test_main_infers_and_dispatches_only_accepted_intents(
     if intent_label == "TIMER":
         timer_expiry_callbacks[0]()
         assert events.count("speak:Your timer is up.") == 1
+    if intent_label == "ALARM":
+        alarm_expiry_callbacks[0]("It's 6:00 AM.")
+        assert events.count("speak:It's 6:00 AM.") == 1
     assert "capture-close" in events
     assert "dispatcher-close" in events

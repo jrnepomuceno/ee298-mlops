@@ -23,9 +23,11 @@ from urllib.request import Request, urlopen
 if __package__:
     from .countdown_timer import CountdownTimer, TimerScheduler
     from .reminder_store import JsonReminderStore, ReminderStoreError
+    from .wall_clock_alarm import AlarmScheduler, WallClockAlarm
 else:
     from countdown_timer import CountdownTimer, TimerScheduler
     from reminder_store import JsonReminderStore, ReminderStoreError
+    from wall_clock_alarm import AlarmScheduler, WallClockAlarm
 
 INTENT_NAMES = (
     "PLAY_MUSIC",
@@ -71,6 +73,10 @@ TIMER_ACTIONS = ("10 seconds", "30 seconds", "1 minute")
 TIMER_DURATIONS_SECONDS = (10, 30, 60)
 TIMER_SLOT_INDEX = 0
 TIMER_EXPIRED_MESSAGE = "Your timer is up."
+ALARM_ACTIONS = ("6:00 AM", "8:00 AM", "9:00 PM")
+ALARM_TIMES = ((6, 0), (8, 0), (21, 0))
+ALARM_SLOT_INDEX = 1
+ALARM_EXPIRED_MESSAGE_FORMAT = "It's {time}."
 
 
 class WeatherServiceError(RuntimeError):
@@ -382,6 +388,8 @@ class IntentDispatcher:
         *,
         timer_expiry_callback: Callable[[], None] | None = None,
         countdown_timer: TimerScheduler | None = None,
+        alarm_expiry_callback: Callable[[str], None] | None = None,
+        alarm_scheduler: AlarmScheduler | None = None,
     ) -> None:
         self._gpio_light: GpioLight | None = None
         self._weather_client = OpenWeatherClient()
@@ -394,6 +402,13 @@ class IntentDispatcher:
             countdown_timer
             if countdown_timer is not None
             else CountdownTimer(timer_expiry_callback or self._log_timer_expiry)
+        )
+        self._alarm_scheduler = (
+            alarm_scheduler
+            if alarm_scheduler is not None
+            else WallClockAlarm(
+                self._speak_alarm_expiry(alarm_expiry_callback)
+            )
         )
         self._handlers = {
             "PLAY_MUSIC": self._music_player.play,
@@ -414,9 +429,7 @@ class IntentDispatcher:
             ),
             "LIST_REMINDERS": self._list_reminders,
             "TIMER": lambda: self._set_timer(None),
-            "ALARM": lambda: self._unavailable(
-                "ALARM", "an alarm service is not configured"
-            ),
+            "ALARM": lambda: self._set_alarm(None),
             "TEMPERATURE": lambda: self._unavailable(
                 "TEMPERATURE", "a temperature sensor is not configured"
             ),
@@ -459,6 +472,8 @@ class IntentDispatcher:
             result = self._create_reminder(slot_action)
         elif intent_name == "TIMER":
             result = self._set_timer(slot_action)
+        elif intent_name == "ALARM":
+            result = self._set_alarm(slot_action)
         else:
             result = handler()
         logger.info(
@@ -471,6 +486,7 @@ class IntentDispatcher:
 
     def close(self) -> None:
         self._countdown_timer.close()
+        self._alarm_scheduler.close()
         self._music_player.close()
         if self._gpio_light is not None:
             self._gpio_light.close()
@@ -523,6 +539,31 @@ class IntentDispatcher:
             status=ExecutionStatus.COMPLETED,
             message=f"Timer set for {action}.",
         )
+
+    def _set_alarm(self, slot_action: str | None) -> ExecutionResult:
+        action = ALARM_ACTIONS[0] if slot_action is None else slot_action
+        if action not in ALARM_ACTIONS:
+            raise ValueError(f"unsupported alarm time: {action!r}")
+        hour, minute = ALARM_TIMES[ALARM_ACTIONS.index(action)]
+        self._alarm_scheduler.start_alarm(hour, minute)
+        return ExecutionResult(
+            intent="ALARM",
+            status=ExecutionStatus.COMPLETED,
+            message=f"Alarm set for {action}.",
+        )
+
+    @staticmethod
+    def _speak_alarm_expiry(
+        callback: Callable[[str], None] | None,
+    ) -> Callable[[datetime], None]:
+        def notify(target: datetime) -> None:
+            if callback is None:
+                logger.warning("alarm expired but no speech callback is configured")
+                return
+            alarm_time = target.strftime("%I:%M %p").lstrip("0")
+            callback(ALARM_EXPIRED_MESSAGE_FORMAT.format(time=alarm_time))
+
+        return notify
 
     @staticmethod
     def _log_timer_expiry() -> None:

@@ -24,6 +24,8 @@ if __package__:
     from .intent_execution import (
         CREATE_REMINDER_ACTIONS,
         CREATE_REMINDER_SLOT_INDEX,
+        ALARM_ACTIONS,
+        ALARM_SLOT_INDEX,
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
@@ -35,6 +37,8 @@ else:
     from intent_execution import (
         CREATE_REMINDER_ACTIONS,
         CREATE_REMINDER_SLOT_INDEX,
+        ALARM_ACTIONS,
+        ALARM_SLOT_INDEX,
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
@@ -917,7 +921,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dispatcher = IntentDispatcher(
                     timer_expiry_callback=lambda: initialized_speech_player.speak(
                         TIMER_EXPIRED_MESSAGE
-                    )
+                    ),
+                    alarm_expiry_callback=initialized_speech_player.speak,
                 )
         finally:
             if indicator is not None:
@@ -1021,6 +1026,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         result = dispatcher.execute(
                             dispatch_label,
                             slot_action=TIMER_ACTIONS[timer_slot],
+                        )
+                    elif dispatch_label == "ALARM":
+                        alarm_slot = prediction.slot_ids[ALARM_SLOT_INDEX]
+                        if not 0 <= alarm_slot < len(ALARM_ACTIONS):
+                            raise RuntimeError(
+                                f"invalid ALARM slot prediction: {alarm_slot}"
+                            )
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=ALARM_ACTIONS[alarm_slot],
                         )
                     else:
                         result = dispatcher.execute(dispatch_label)

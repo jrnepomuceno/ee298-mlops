@@ -233,6 +233,7 @@ The currently implemented local actions are:
 | `WEATHER` | Speak current conditions in Quezon City using OpenWeather Current Weather API. |
 | `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
 | `TIMER` | Start a local countdown for 10 seconds, 30 seconds, or 1 minute and speak when it expires. |
+| `ALARM` | Set a one-shot alarm for 6:00 AM, 8:00 AM, or 9:00 PM local device time. |
 | `CREATE_REMINDER`, `LIST_REMINDERS` | Persist undated reminder actions locally and speak the saved list. |
 
 The TIMER slot selects one of the three trained durations. Only one countdown
@@ -240,6 +241,13 @@ is active at a time; setting another replaces the current timer. It runs
 asynchronously, is not persisted across service restarts, and speaks “Your
 timer is up.” on expiry. A direct or forced TIMER dispatch without an inferred
 slot defaults to 10 seconds.
+
+The ALARM slot selects one of the three trained local clock times. The alarm
+fires at the next occurrence of that time (tomorrow if today's time has
+passed), replaces any existing alarm, and speaks the scheduled time when it
+fires. It is independent of TIMER and is not persisted across service
+restarts. A direct or forced ALARM dispatch without an inferred slot defaults
+to 6:00 AM. There is no model-supported cancel-alarm intent.
 
 `CREATE_REMINDER` stores one of the trained actions (`Drink water`, `Study`,
 or `Exercise`) with a local creation timestamp. The model slot does not
@@ -307,11 +315,11 @@ coil or other high-load device directly to a Raspberry Pi GPIO. GPIO actions
 require `gpiozero`, which is supplied by the Raspberry Pi OS packages
 installed by `setup_pi.sh`.
 
-Telephony, messaging, alarms, temperature, brightness, and color
+Telephony, messaging, temperature, brightness, and color
 actions return `unavailable` until their corresponding service or hardware
-adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Alarm, temperature,
+adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Temperature,
 brightness, and color slot values are not yet acted on; TIMER's duration slot
-is implemented.
+and ALARM's time slot are implemented.
 
 An inference loop can dispatch a predicted class ID like this:
 
@@ -327,10 +335,10 @@ finally:
 ```
 
 The model's six slot outputs are decoded. TIMER uses its predicted duration
-slot, and CREATE_REMINDER uses its predicted action slot. Alarm, temperature,
-brightness, and color slot actions remain unimplemented. The wake-word model
-files downloaded by setup are stored under `models/openwakeword/`; they are
-not embedded into the Git repository.
+slot, ALARM uses its predicted local clock-time slot, and CREATE_REMINDER uses
+its predicted action slot. Temperature, brightness, and color slot actions
+remain unimplemented. The wake-word model files downloaded by setup are stored
+under `models/openwakeword/`; they are not embedded into the Git repository.
 
 ## Dependency note
 
