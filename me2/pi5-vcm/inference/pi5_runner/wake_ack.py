@@ -29,6 +29,8 @@ if __package__:
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
+        TEMPERATURE_ACTIONS,
+        TEMPERATURE_SLOT_INDEX,
     )
     from .intent_execution import IntentDispatcher
     from .intent_inference import OnnxIntentPredictor
@@ -42,6 +44,8 @@ else:
         TIMER_ACTIONS,
         TIMER_EXPIRED_MESSAGE,
         TIMER_SLOT_INDEX,
+        TEMPERATURE_ACTIONS,
+        TEMPERATURE_SLOT_INDEX,
     )
     from intent_execution import IntentDispatcher
     from intent_inference import OnnxIntentPredictor
@@ -1036,6 +1040,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         result = dispatcher.execute(
                             dispatch_label,
                             slot_action=ALARM_ACTIONS[alarm_slot],
+                        )
+                    elif dispatch_label == "TEMPERATURE":
+                        temperature_slot = prediction.slot_ids[
+                            TEMPERATURE_SLOT_INDEX
+                        ]
+                        if not 0 <= temperature_slot < len(TEMPERATURE_ACTIONS):
+                            raise RuntimeError(
+                                "invalid TEMPERATURE slot prediction: "
+                                f"{temperature_slot}"
+                            )
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=TEMPERATURE_ACTIONS[temperature_slot],
                         )
                     else:
                         result = dispatcher.execute(dispatch_label)

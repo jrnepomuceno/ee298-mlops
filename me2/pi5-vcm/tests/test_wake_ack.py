@@ -995,6 +995,7 @@ def test_record_command_returns_none_when_no_speech_starts() -> None:
         (True, "CREATE_REMINDER"),
         (True, "TIMER"),
         (True, "ALARM"),
+        (True, "TEMPERATURE"),
     ],
 )
 def test_main_infers_and_dispatches_only_accepted_intents(
@@ -1038,7 +1039,7 @@ def test_main_infers_and_dispatches_only_accepted_intents(
                     "confidence": 0.8,
                     "out_of_scope_confidence": 0.1,
                     "accepted": accepted,
-                    "slot_ids": (1, 0, 0, 0, 0, 2),
+                    "slot_ids": (1, 0, 2, 0, 0, 2),
                 },
             )()
 
@@ -1125,6 +1126,8 @@ def test_main_infers_and_dispatches_only_accepted_intents(
         expected_slot_action = "30 seconds"
     elif accepted and intent_label == "ALARM":
         expected_slot_action = "6:00 AM"
+    elif accepted and intent_label == "TEMPERATURE":
+        expected_slot_action = "26 degrees"
     assert f"dispatch:{expected_dispatch}:{expected_slot_action}" in events
     assert events.index("acknowledge") < events.index("record-command")
     assert events.index("record-command") < events.index("predict")

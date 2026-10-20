@@ -136,6 +136,11 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   expiry, and is not persisted across service restarts. No cancel-alarm intent
   exists in the model contract. Validation is pytest-only; this has not been
   tested on the Pi.
+- Implemented audio-only `TEMPERATURE` set-point confirmations for the
+  dataset's 18, 22, and 26 degree slots. It speaks the requested value but
+  does not control a thermostat or read a sensor; neither is configured. A
+  missing slot prompts for a supported set point. Validation is pytest-only;
+  this has not been tested on the Pi.
 - Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
   rainbow cycle during warmup, off in standby, blue on wake, green while the
   spoken reply plays, then off. The existing optional GPIO indicator remains
@@ -161,6 +166,9 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   compilation, changed-file line-length checks, and `git diff --check` passed.
   After implementing ALARM, the focused alarm, timer, intent-execution, and
   wake-runner suite passed: 90 tests. Python compilation, changed-file
+  line-length checks, and `git diff --check` passed. After implementing
+  audio-only TEMPERATURE confirmations, the focused intent-execution and
+  wake-runner tests passed: 79 tests. Python compilation, changed-file
   line-length checks, and `git diff --check` passed.
 
 ### Not yet verified or completed
@@ -169,7 +177,7 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
 - The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
-  `TEMPERATURE`, `BRIGHTNESS`, and `COLOR`; their service or
+  `BRIGHTNESS`, and `COLOR`; their service or
   hardware adapters are not configured. `OUT_OF_SCOPE` remains rejected and
   now speaks a friendly retry prompt.
 - Reminder behavior has only been verified with pytest. It still needs

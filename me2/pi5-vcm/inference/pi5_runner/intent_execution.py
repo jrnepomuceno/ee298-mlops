@@ -77,6 +77,9 @@ ALARM_ACTIONS = ("6:00 AM", "8:00 AM", "9:00 PM")
 ALARM_TIMES = ((6, 0), (8, 0), (21, 0))
 ALARM_SLOT_INDEX = 1
 ALARM_EXPIRED_MESSAGE_FORMAT = "It's {time}."
+TEMPERATURE_ACTIONS = ("18 degrees", "22 degrees", "26 degrees")
+TEMPERATURE_SETPOINTS = (18, 22, 26)
+TEMPERATURE_SLOT_INDEX = 2
 
 
 class WeatherServiceError(RuntimeError):
@@ -430,9 +433,7 @@ class IntentDispatcher:
             "LIST_REMINDERS": self._list_reminders,
             "TIMER": lambda: self._set_timer(None),
             "ALARM": lambda: self._set_alarm(None),
-            "TEMPERATURE": lambda: self._unavailable(
-                "TEMPERATURE", "a temperature sensor is not configured"
-            ),
+            "TEMPERATURE": lambda: self._set_temperature(None),
             "BRIGHTNESS": lambda: self._unavailable(
                 "BRIGHTNESS", "a display brightness controller is not configured"
             ),
@@ -474,6 +475,8 @@ class IntentDispatcher:
             result = self._set_timer(slot_action)
         elif intent_name == "ALARM":
             result = self._set_alarm(slot_action)
+        elif intent_name == "TEMPERATURE":
+            result = self._set_temperature(slot_action)
         else:
             result = handler()
         logger.info(
@@ -550,6 +553,23 @@ class IntentDispatcher:
             intent="ALARM",
             status=ExecutionStatus.COMPLETED,
             message=f"Alarm set for {action}.",
+        )
+
+    @staticmethod
+    def _set_temperature(slot_action: str | None) -> ExecutionResult:
+        if slot_action is None:
+            return ExecutionResult(
+                intent="TEMPERATURE",
+                status=ExecutionStatus.REJECTED,
+                message="Please choose 18, 22, or 26 degrees.",
+            )
+        if slot_action not in TEMPERATURE_ACTIONS:
+            raise ValueError(f"unsupported temperature set point: {slot_action!r}")
+        setpoint = TEMPERATURE_SETPOINTS[TEMPERATURE_ACTIONS.index(slot_action)]
+        return ExecutionResult(
+            intent="TEMPERATURE",
+            status=ExecutionStatus.COMPLETED,
+            message=f"Setting the temperature to {setpoint} degrees.",
         )
 
     @staticmethod

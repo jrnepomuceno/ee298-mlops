@@ -105,11 +105,13 @@ def test_dispatcher_covers_all_model_intents(
                 result.message
                 == "Sorry, I didn't understand that. Please try again."
             )
+        elif intent_name == "TEMPERATURE":
+            assert result.status is execution.ExecutionStatus.REJECTED
+            assert result.message == "Please choose 18, 22, or 26 degrees."
         elif intent_name in {
             "WEATHER",
             "CALL",
             "MESSAGE",
-            "TEMPERATURE",
             "BRIGHTNESS",
             "COLOR",
         }:
@@ -193,6 +195,46 @@ def test_alarm_expiry_speech_includes_local_target_time() -> None:
     notify(datetime(2026, 10, 20, 6, 0))
 
     assert speech == ["It's 6:00 AM."]
+
+
+@pytest.mark.parametrize(
+    ("action", "setpoint"),
+    [
+        ("18 degrees", 18),
+        ("22 degrees", 22),
+        ("26 degrees", 26),
+    ],
+)
+def test_temperature_speaks_requested_setpoint_without_hardware(
+    action: str,
+    setpoint: int,
+) -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    result = dispatcher.execute("TEMPERATURE", slot_action=action)
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == f"Setting the temperature to {setpoint} degrees."
+    dispatcher.close()
+
+
+def test_temperature_without_slot_prompts_for_a_supported_setpoint() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    result = dispatcher.execute("TEMPERATURE")
+
+    assert result.status is execution.ExecutionStatus.REJECTED
+    assert result.message == "Please choose 18, 22, or 26 degrees."
+    dispatcher.close()
+
+
+def test_temperature_rejects_unsupported_setpoint() -> None:
+    dispatcher = execution.IntentDispatcher()
+
+    with pytest.raises(ValueError, match="unsupported temperature set point"):
+        dispatcher.execute("TEMPERATURE", slot_action="24 degrees")
+
+    dispatcher.close()
 
 
 def test_create_and_list_reminders_persist_across_dispatchers(tmp_path) -> None:
