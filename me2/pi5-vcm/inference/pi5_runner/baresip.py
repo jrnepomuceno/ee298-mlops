@@ -59,7 +59,7 @@ class BaresipClient:
         )
         self.audio_device = audio_device or os.environ.get(
             "PI5_VCM_INPUT_DEVICE",
-            "default:CARD=DuoCast",
+            "default",
         )
         self._connection_factory = connection_factory
         self._process_factory = process_factory

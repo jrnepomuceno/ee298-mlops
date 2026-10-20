@@ -326,6 +326,15 @@ def test_parse_args_accepts_complete_intent_configuration() -> None:
     assert args.intent_threshold == pytest.approx(0.78)
 
 
+def test_parse_args_defaults_to_system_audio_devices() -> None:
+    args = runtime._parse_args(
+        ["--wakeword-model", "alexa.onnx", "--no-led"]
+    )
+
+    assert args.input_device == "default"
+    assert args.output_device is None
+
+
 def test_parse_args_requires_paired_intent_configuration() -> None:
     with pytest.raises(SystemExit):
         runtime._parse_args(
@@ -480,6 +489,9 @@ def test_forced_intent_applies_to_one_wake_then_clears(
                 {"intent": intent, "status": "completed", "message": "test"},
             )()
 
+        def wait_for_call_end(self) -> None:
+            events.append("wait-for-call-end")
+
         def close(self) -> None:
             events.append("dispatcher-close")
 
@@ -528,6 +540,7 @@ def test_forced_intent_applies_to_one_wake_then_clears(
 
     assert wake_count == 2
     assert record_count == 1
+    assert events.index("wait-for-call-end") < events.index("capture-start")
     assert events.count("dispatch:TIME") == 1
     assert events.count("speak") == 1
     assert events.index("dispatch:TIME") < events.index("detector-reset")
@@ -600,6 +613,9 @@ def test_persistent_dummy_intent_dispatches_and_speaks_on_every_wake(
                     "message": "The local time is test.",
                 },
             )()
+
+        def wait_for_call_end(self) -> None:
+            events.append("wait-for-call-end")
 
         def close(self) -> None:
             events.append("dispatcher-close")
@@ -1124,6 +1140,7 @@ def test_main_infers_and_dispatches_only_accepted_intents(
             interaction_color_store,
             interaction_color_callback,
             brightness_callback,
+            baresip_audio_device,
         ) -> None:
             assert interaction_color_store.load() == "Blue"
             self.timer_expiry_callback = timer_expiry_callback
@@ -1132,6 +1149,7 @@ def test_main_infers_and_dispatches_only_accepted_intents(
             alarm_expiry_callbacks.append(alarm_expiry_callback)
             color_callbacks.append(interaction_color_callback)
             assert brightness_callback is None
+            assert baresip_audio_device == "test-mic"
 
         def execute(
             self,
@@ -1149,6 +1167,9 @@ def test_main_infers_and_dispatches_only_accepted_intents(
                     "message": "test result",
                 },
             )()
+
+        def wait_for_call_end(self) -> None:
+            events.append("wait-for-call-end")
 
         def close(self) -> None:
             events.append("dispatcher-close")

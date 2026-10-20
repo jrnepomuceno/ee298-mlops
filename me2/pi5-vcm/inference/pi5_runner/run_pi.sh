@@ -20,16 +20,20 @@ MODEL="$ASSET_DIR/alexa_v0.1.onnx"
     exit 1
 }
 
-pipewire_target="${PI5_VCM_PIPEWIRE_TARGET:-auto}"
-if [[ -f "$CONFIG_DIR/pipewire-target" ]]; then
-    pipewire_target="$(<"$CONFIG_DIR/pipewire-target")"
-fi
-
 args=(
     --wakeword-model "$MODEL"
-    --input-device "${PI5_VCM_INPUT_DEVICE:-default:CARD=DuoCast}"
-    --output-device "pipewire:$pipewire_target"
+    --input-device "${PI5_VCM_INPUT_DEVICE:-default}"
 )
+output_device="${PI5_VCM_OUTPUT_DEVICE:-}"
+if [[ -z "$output_device" && -n "${PI5_VCM_PIPEWIRE_TARGET:-}" ]]; then
+    output_device="pipewire:$PI5_VCM_PIPEWIRE_TARGET"
+fi
+if [[ -z "$output_device" && -f "$CONFIG_DIR/pipewire-target" ]]; then
+    output_device="pipewire:$(<"$CONFIG_DIR/pipewire-target")"
+fi
+if [[ -n "$output_device" ]]; then
+    args+=(--output-device "$output_device")
+fi
 if [[ -n "${PI5_VCM_LED_GPIO:-}" ]]; then
     args+=(--led-gpio "$PI5_VCM_LED_GPIO")
 else

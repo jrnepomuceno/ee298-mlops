@@ -804,8 +804,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--wakeword-model", type=Path, required=True)
     parser.add_argument(
         "--input-device",
-        default="default:CARD=DuoCast",
-        help="ALSA capture device (the Pi 5 currently has a HyperX DuoCast)",
+        default="default",
+        help="ALSA capture device (defaults to the system default)",
     )
     parser.add_argument(
         "--output-device",
@@ -1015,6 +1015,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if rgb_indicator is not None
                         else None
                     ),
+                    baresip_audio_device=args.input_device,
                 )
         finally:
             if indicator is not None:
@@ -1045,6 +1046,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dummy_intent,
             )
         while True:
+            if dispatcher is not None:
+                dispatcher.wait_for_call_end()
             capture.start()
             score = listen_for_wake(detector, capture, threshold=args.threshold)
             acknowledge_wake(capture, indicator, beep_player)
@@ -1249,6 +1252,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     time.sleep(remaining_hold)
                 indicator.turn_off()
             if args.once:
+                if dispatcher is not None:
+                    dispatcher.wait_for_call_end()
                 return 0
             detector.reset()
             logger.info("wake listener rearmed")

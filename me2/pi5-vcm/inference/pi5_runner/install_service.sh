@@ -47,8 +47,6 @@ mkdir -p "$UNIT_DIR"
 cat > "$UNIT_PATH" <<EOF
 [Unit]
 Description=Pi 5 Alexa wake-word acknowledgement listener
-After=pipewire.service wireplumber.service
-Wants=pipewire.service wireplumber.service
 
 [Service]
 Type=simple

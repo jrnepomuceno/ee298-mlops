@@ -223,7 +223,7 @@ def test_startup_requires_contact_control_module_and_loopback_listener(
         "module alsa.so\n"
         "module_app contact.so\n"
         "module_app ctrl_tcp.so\n"
-        "audio_source alsa,default:CARD=DuoCast\n"
+        "audio_source alsa,default\n"
         "ctrl_tcp_listen 127.0.0.1:4444\n",
         encoding="utf-8",
     )
@@ -235,7 +235,7 @@ def test_startup_requires_contact_control_module_and_loopback_listener(
         "module alsa.so\n"
         "module_app contact.so\n"
         "module_app ctrl_tcp.so\n"
-        "audio_source alsa,default:CARD=DuoCast\n"
+        "audio_source alsa,default\n"
         "ctrl_tcp_listen 0.0.0.0:4444\n",
         encoding="utf-8",
     )
@@ -246,7 +246,7 @@ def test_startup_requires_contact_control_module_and_loopback_listener(
         "module alsa.so\n"
         "module_app ctrl_tcp.so\n"
         "module_app contact.so\n"
-        "audio_source alsa,default:CARD=DuoCast\n"
+        "audio_source alsa,default\n"
         "ctrl_tcp_listen 127.0.0.1:4444\n",
         encoding="utf-8",
     )
@@ -258,7 +258,7 @@ def test_startup_rejects_missing_contact_module(tmp_path: Path) -> None:
     (tmp_path / "config").write_text(
         "module alsa.so\n"
         "module_app ctrl_tcp.so\n"
-        "audio_source alsa,default:CARD=DuoCast\n"
+        "audio_source alsa,default\n"
         "ctrl_tcp_listen 127.0.0.1:4444\n",
         encoding="utf-8",
     )
@@ -275,7 +275,7 @@ def test_startup_rejects_audio_source_that_would_not_share_runner_mic(
         "module alsa.so\n"
         "module_app contact.so\n"
         "module_app ctrl_tcp.so\n"
-        "audio_source alsa,default\n"
+        "audio_source alsa,hw:1,0\n"
         "ctrl_tcp_listen 127.0.0.1:4444\n",
         encoding="utf-8",
     )

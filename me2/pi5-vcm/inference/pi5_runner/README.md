@@ -1,10 +1,85 @@
 # Raspberry Pi 5 wake runner
 
-This folder is the self-contained source package for the Pi 5 Alexa
-wake-word acknowledgement runner. It can be copied or archived on its own.
-Runtime-installed files stay in this folder too: `.venv/`, `models/`, and
-`.config/`. Run setup after placing the folder at its final location because
-Python virtual environments contain absolute paths.
+This folder contains the deployable inference runner package for 64-bit
+Raspberry Pi OS. It can be packaged on a development machine and installed on
+a compatible Pi without copying the rest of the repository. The install flow
+creates the Python environment, downloads runtime assets, and installs the
+user service. Machine-specific files stay beside the runner: `.venv/`,
+`models/`, and `.config/`.
+
+## Build and install a deployment package
+
+From this folder on a development machine with `tar` and a SHA-256 utility:
+
+```bash
+bash package_pi.sh
+```
+
+This creates `dist/pi5-vcm-inference-<version>.tar.gz` and a matching
+`.sha256` checksum. The archive contains the runner source and scripts, but
+excludes Python environments, downloaded models, local configuration, and
+Python caches. To choose an output directory or version:
+
+```bash
+bash package_pi.sh /path/to/output v1.0.0
+```
+
+Copy the archive to a compatible Pi, then install it under the current user's
+home directory:
+
+```bash
+mkdir -p "$HOME/.local/opt/pi5-vcm"
+tar -xzf pi5-vcm-inference-<version>.tar.gz \
+  -C "$HOME/.local/opt/pi5-vcm" --strip-components=1
+cd "$HOME/.local/opt/pi5-vcm"
+bash install_pi.sh
+```
+
+`install_pi.sh` runs `setup_pi.sh`, then enables and starts the systemd user
+service. Use `bash install_pi.sh --setup-only` to prepare runtime dependencies
+and assets without starting the service; start manually with `bash run_pi.sh`
+or install the service later with `bash install_service.sh`.
+
+The package currently targets 64-bit Raspberry Pi OS (`aarch64`), Python
+3.10–3.13, and ALSA. It uses the system's default ALSA capture and playback
+devices unless you configure overrides. Install host packages before running
+the installer:
+
+```bash
+sudo apt install alsa-utils python3-venv curl
+```
+
+Connect and configure a microphone and speaker visible to ALSA. To select
+specific devices, set `PI5_VCM_INPUT_DEVICE` to an ALSA capture device and
+`PI5_VCM_OUTPUT_DEVICE` to an ALSA playback device or `pipewire:<target>` in
+`~/.config/pi5-vcm/environment`. Example:
+
+```text
+PI5_VCM_INPUT_DEVICE=plughw:1,0
+PI5_VCM_OUTPUT_DEVICE=pipewire:auto
+```
+
+PipeWire is optional; install `pipewire`, `wireplumber`, and `pipewire-bin` if
+you want to use PipeWire output routing. The legacy `PI5_VCM_PIPEWIRE_TARGET`
+setting and an existing `.config/pipewire-target` file are also honored for
+upgrades. GPIO packages are optional and only needed for GPIO indicator or
+light intents. DuoCast RGB/color/brightness control remains an optional
+hardware-specific feature and is disabled when its utility is absent. The
+inference runner itself does not require a particular microphone or speaker.
+
+For an update, stop the user service, extract the newer archive over this
+installation, then rerun setup and service installation:
+
+```bash
+systemctl --user stop pi5-vcm-inference.service
+tar -xzf pi5-vcm-inference-<version>.tar.gz \
+  -C "$HOME/.local/opt/pi5-vcm" --strip-components=1
+cd "$HOME/.local/opt/pi5-vcm"
+bash install_pi.sh
+```
+
+The archive intentionally excludes existing local runtime configuration,
+models, and the virtual environment. Setup reuses/downloads assets as needed.
 
 From this folder, set up the wake-word runtime with:
 
@@ -15,22 +90,12 @@ bash setup_pi.sh
 The setup script creates a Python virtual environment, installs the pinned
 openWakeWord release with its ONNX runtime dependencies, downloads the Alexa
 and shared feature ONNX models from the upstream `v0.5.1` release, and verifies
-their SHA-256 hashes. It requires a 64-bit Raspberry Pi OS, Python 3.10–3.13,
-ALSA capture utilities, PipeWire, and the Raspberry Pi OS `python3-gpiozero`
-and `python3-lgpio` packages. It discovers the connected **WILLEN** PipeWire
-sink and stores its target name in this folder's `.config/`. Python packages
-and downloaded wake models live in this folder's `.venv/` and `models/`;
-the host OS supplies ALSA, PipeWire, and GPIO access. Setup also installs the
-packaged WILLEN no-idle-suspend rule under
-`~/.config/wireplumber/wireplumber.conf.d/` and restarts WirePlumber when that
-rule changes. It verifies that both `node.pause-on-idle=false` and a zero
-session suspend timeout are active on the detected WILLEN sink.
-
-The speaker rule is a persistent WirePlumber user configuration, independent
-of `run_pi.sh`; it remains active when the listener is stopped. Rerun
-`bash setup_pi.sh` after copying an updated runner package to install updates to
-the rule. This disables host-side idle suspension only; the speaker's own
-battery-saving auto-off behavior is separate.
+their SHA-256 hashes. It requires 64-bit Raspberry Pi OS, Python 3.10–3.13,
+ALSA capture/playback utilities, and `curl`. Python packages and downloaded
+wake models live in this folder's `.venv/` and `models/`; ALSA drivers and
+optional audio/GPIO services are supplied by the host OS. Setup does not scan
+for, configure, or require a specific microphone, speaker, PipeWire server, or
+GPIO package.
 
 Start listening after setup:
 
@@ -67,10 +132,12 @@ assets:
 bash uninstall_service.sh
 ```
 
-The runner captures mono 16-kHz audio from the HyperX DuoCast, detects
-“Alexa,” stops capture, and plays the acknowledgement beep through WILLEN.
-The external GPIO indicator is disabled by default because the LED's BCM pin
-has not been specified. Once wired, set it for a run, for example:
+The runner captures mono 16-kHz audio from the ALSA system default, detects
+“Alexa,” stops capture, and plays the acknowledgement beep through the ALSA
+system default. Override the input and output with `PI5_VCM_INPUT_DEVICE` and
+`PI5_VCM_OUTPUT_DEVICE` or the corresponding command-line options. The
+external GPIO indicator is disabled by default because the LED's BCM pin has
+not been specified. Once wired, set it for a run, for example:
 
 ```bash
 PI5_VCM_LED_GPIO=17 bash run_pi.sh
@@ -363,16 +430,16 @@ before enabling the integration:
 module alsa.so
 module_app contact.so
 module_app ctrl_tcp.so
-audio_source alsa,default:CARD=DuoCast
+audio_source alsa,default
 ctrl_tcp_listen 127.0.0.1:4444
 ```
 
 Keep the listener on loopback; do not expose the control port on a LAN
 interface. `audio_source` must point to the same ALSA capture device used by
-the runner (`PI5_VCM_INPUT_DEVICE`, default `default:CARD=DuoCast`). This lets
-Baresip acquire the DuoCast microphone for the SIP call. Baresip must have a
-current contact selected. Its existing account configuration remains in
-`~/.baresip/accounts`.
+the runner (`PI5_VCM_INPUT_DEVICE`, default `default`); replace `default` above
+if a device-specific ALSA name is configured. This lets Baresip acquire the
+configured microphone for the SIP call. Baresip must have a current contact
+selected. Its existing account configuration remains in `~/.baresip/accounts`.
 
 To have the inference runner start Baresip in the background and stop the
 process it started when the runner exits, put these lines in the private
