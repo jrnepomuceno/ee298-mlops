@@ -124,6 +124,11 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   entries. These are list entries only; the model slot has no due date/time,
   and no scheduling or notifications are provided. Validation so far is
   pytest-only; this has not been tested on the Pi.
+- Implemented `TIMER` for the dataset's three durations (10 seconds, 30
+  seconds, and 1 minute). A single asynchronous, process-local countdown is
+  active at once; setting another replaces it. Expiry speaks “Your timer is
+  up.” The timer is not persisted across service restarts. Validation is
+  pytest-only; this has not been tested on the Pi.
 - Added optional HyperX DuoCast RGB states using a foreground QuadcastRGB build:
   rainbow cycle during warmup, off in standby, blue on wake, green while the
   spoken reply plays, then off. The existing optional GPIO indicator remains
@@ -144,7 +149,9 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `git diff --check` passed for the reminder changes. After adding the
   user-facing out-of-scope response, the focused intent-execution and
   wake-runner suite passed: 62 tests; Python compilation and
-  `git diff --check` passed.
+  `git diff --check` passed. After implementing TIMER, the focused countdown
+  timer, intent-execution, and wake-runner tests passed: 74 tests. Python
+  compilation, changed-file line-length checks, and `git diff --check` passed.
 
 ### Not yet verified or completed
 
@@ -152,11 +159,13 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   output, and slot contract. A compatible exported model and its paired
   `mel_stats.npz` are still required before real ME2 predictions can be run.
 - The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
-  `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, and `COLOR`; their service or
+  `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, and `COLOR`; their service or
   hardware adapters are not configured. `OUT_OF_SCOPE` remains rejected and
   now speaks a friendly retry prompt.
 - Reminder behavior has only been verified with pytest. It still needs
   on-device validation when the Pi is available.
+- Timer behavior has only been verified with pytest. It still needs on-device
+  validation when the Pi is available.
 - `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin; their real-device
   behavior has not been validated on the Pi in this progress update.
 - Persistent `--dummy-intent PLAY_MUSIC` is a test/demo mode, not model-routed

@@ -403,7 +403,7 @@ def test_forced_intent_applies_to_one_wake_then_clears(
                 raise KeyboardInterrupt
 
     class Dispatcher:
-        def __init__(self) -> None:
+        def __init__(self, **kwargs) -> None:
             pass
 
         def execute(self, intent: str) -> object:
@@ -520,7 +520,7 @@ def test_persistent_dummy_intent_dispatches_and_speaks_on_every_wake(
                 raise KeyboardInterrupt
 
     class Dispatcher:
-        def __init__(self) -> None:
+        def __init__(self, **kwargs) -> None:
             pass
 
         def execute(self, intent: str) -> object:
@@ -993,6 +993,7 @@ def test_record_command_returns_none_when_no_speech_starts() -> None:
         (True, "WEATHER"),
         (False, "WEATHER"),
         (True, "CREATE_REMINDER"),
+        (True, "TIMER"),
     ],
 )
 def test_main_infers_and_dispatches_only_accepted_intents(
@@ -1036,13 +1037,16 @@ def test_main_infers_and_dispatches_only_accepted_intents(
                     "confidence": 0.8,
                     "out_of_scope_confidence": 0.1,
                     "accepted": accepted,
-                    "slot_ids": (0, 0, 0, 0, 0, 2),
+                    "slot_ids": (1, 0, 0, 0, 0, 2),
                 },
             )()
 
+    timer_expiry_callbacks = []
+
     class Dispatcher:
-        def __init__(self) -> None:
-            pass
+        def __init__(self, *, timer_expiry_callback) -> None:
+            self.timer_expiry_callback = timer_expiry_callback
+            timer_expiry_callbacks.append(timer_expiry_callback)
 
         def execute(
             self,
@@ -1089,7 +1093,7 @@ def test_main_infers_and_dispatches_only_accepted_intents(
         "SpeechPlayer",
         lambda **kwargs: SimpleNamespace(
             warmup=lambda: events.append("tts-warmup"),
-            speak=lambda text: events.append("speak"),
+            speak=lambda text: events.append(f"speak:{text}"),
         ),
     )
     monkeypatch.setattr(runtime, "listen_for_wake", lambda *a, **kw: 0.82)
@@ -1105,15 +1109,18 @@ def test_main_infers_and_dispatches_only_accepted_intents(
     assert runtime.main() == 0
 
     expected_dispatch = intent_label if accepted else "OUT_OF_SCOPE"
-    expected_slot_action = (
-        "Exercise"
-        if accepted and intent_label == "CREATE_REMINDER"
-        else "None"
-    )
+    expected_slot_action = "None"
+    if accepted and intent_label == "CREATE_REMINDER":
+        expected_slot_action = "Exercise"
+    elif accepted and intent_label == "TIMER":
+        expected_slot_action = "30 seconds"
     assert f"dispatch:{expected_dispatch}:{expected_slot_action}" in events
     assert events.index("acknowledge") < events.index("record-command")
     assert events.index("record-command") < events.index("predict")
     assert "predict" in events
-    assert events.count("speak") == 1
+    assert events.count("speak:test result") == 1
+    if intent_label == "TIMER":
+        timer_expiry_callbacks[0]()
+        assert events.count("speak:Your timer is up.") == 1
     assert "capture-close" in events
     assert "dispatcher-close" in events

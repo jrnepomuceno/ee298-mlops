@@ -232,7 +232,14 @@ The currently implemented local actions are:
 | `TIME` | Speak the Pi's local system time using Piper TTS. |
 | `WEATHER` | Speak current conditions in Quezon City using OpenWeather Current Weather API. |
 | `LIGHT_ON`, `LIGHT_OFF` | Toggle one GPIO Zero output if `PI5_VCM_LIGHT_GPIO` is configured. |
+| `TIMER` | Start a local countdown for 10 seconds, 30 seconds, or 1 minute and speak when it expires. |
 | `CREATE_REMINDER`, `LIST_REMINDERS` | Persist undated reminder actions locally and speak the saved list. |
+
+The TIMER slot selects one of the three trained durations. Only one countdown
+is active at a time; setting another replaces the current timer. It runs
+asynchronously, is not persisted across service restarts, and speaks “Your
+timer is up.” on expiry. A direct or forced TIMER dispatch without an inferred
+slot defaults to 10 seconds.
 
 `CREATE_REMINDER` stores one of the trained actions (`Drink water`, `Study`,
 or `Exercise`) with a local creation timestamp. The model slot does not
@@ -300,10 +307,11 @@ coil or other high-load device directly to a Raspberry Pi GPIO. GPIO actions
 require `gpiozero`, which is supplied by the Raspberry Pi OS packages
 installed by `setup_pi.sh`.
 
-Telephony, messaging, timers, alarms, temperature, brightness, and color
+Telephony, messaging, alarms, temperature, brightness, and color
 actions return `unavailable` until their corresponding service or hardware
-adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Timer, alarm,
-temperature, brightness, and color slot values are not yet acted on.
+adapter is configured. `OUT_OF_SCOPE` returns `rejected`. Alarm, temperature,
+brightness, and color slot values are not yet acted on; TIMER's duration slot
+is implemented.
 
 An inference loop can dispatch a predicted class ID like this:
 
@@ -318,10 +326,11 @@ finally:
     dispatcher.close()
 ```
 
-The model's six slot outputs are decoded. CREATE_REMINDER uses its predicted
-action slot; timer, alarm, temperature, brightness, and color slot actions
-remain unimplemented. The wake-word model files downloaded by setup are stored
-under `models/openwakeword/`; they are not embedded into the Git repository.
+The model's six slot outputs are decoded. TIMER uses its predicted duration
+slot, and CREATE_REMINDER uses its predicted action slot. Alarm, temperature,
+brightness, and color slot actions remain unimplemented. The wake-word model
+files downloaded by setup are stored under `models/openwakeword/`; they are
+not embedded into the Git repository.
 
 ## Dependency note
 

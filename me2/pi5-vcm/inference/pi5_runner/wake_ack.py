@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+from threading import Lock
 import time
 import wave
 from collections.abc import Sequence
@@ -23,12 +24,21 @@ if __package__:
     from .intent_execution import (
         CREATE_REMINDER_ACTIONS,
         CREATE_REMINDER_SLOT_INDEX,
+        TIMER_ACTIONS,
+        TIMER_EXPIRED_MESSAGE,
+        TIMER_SLOT_INDEX,
     )
     from .intent_execution import IntentDispatcher
     from .intent_inference import OnnxIntentPredictor
 else:
     from intent_execution import INTENT_NAMES as EXECUTION_INTENT_NAMES
-    from intent_execution import CREATE_REMINDER_ACTIONS, CREATE_REMINDER_SLOT_INDEX
+    from intent_execution import (
+        CREATE_REMINDER_ACTIONS,
+        CREATE_REMINDER_SLOT_INDEX,
+        TIMER_ACTIONS,
+        TIMER_EXPIRED_MESSAGE,
+        TIMER_SLOT_INDEX,
+    )
     from intent_execution import IntentDispatcher
     from intent_inference import OnnxIntentPredictor
 
@@ -514,6 +524,7 @@ class SpeechPlayer:
         self.device = device
         self.alsa_executable = alsa_executable
         self.pipewire_executable = pipewire_executable
+        self._speech_lock = Lock()
         if not self.model_path.is_file():
             raise FileNotFoundError(f"Piper voice model does not exist: {model_path}")
         if not Path(f"{self.model_path}.json").is_file():
@@ -532,6 +543,10 @@ class SpeechPlayer:
             self._synthesize_to_file(PIPER_WARMUP_TEXT, audio_file.name)
 
     def speak(self, text: str) -> None:
+        with self._speech_lock:
+            self._speak(text)
+
+    def _speak(self, text: str) -> None:
         if not text.strip():
             raise ValueError("speech text must not be empty")
         pipewire_target: str | None = None
@@ -881,25 +896,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             forced_intent = getattr(args, "force_intent", None)
             dummy_time = getattr(args, "dummy_time", False)
             dummy_intent = getattr(args, "dummy_intent", None)
-            dispatcher = (
-                IntentDispatcher()
-                if predictor is not None
+            if (
+                predictor is not None
                 or forced_intent is not None
                 or dummy_time
                 or dummy_intent is not None
-                else None
-            )
-            if dispatcher is not None:
+            ):
                 logger.info("loading Piper voice model for low-latency speech")
-                speech_player = SpeechPlayer(
+                initialized_speech_player = SpeechPlayer(
                     model_path=args.tts_model,
                     device=args.output_device,
                 )
                 warmup_started = time.monotonic()
-                speech_player.warmup()
+                initialized_speech_player.warmup()
                 logger.info(
                     "Piper voice model ready: silent synthesis warmup_ms=%.1f",
                     (time.monotonic() - warmup_started) * 1_000,
+                )
+                speech_player = initialized_speech_player
+                dispatcher = IntentDispatcher(
+                    timer_expiry_callback=lambda: initialized_speech_player.speak(
+                        TIMER_EXPIRED_MESSAGE
+                    )
                 )
         finally:
             if indicator is not None:
@@ -993,6 +1011,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         result = dispatcher.execute(
                             dispatch_label,
                             slot_action=reminder_action,
+                        )
+                    elif dispatch_label == "TIMER":
+                        timer_slot = prediction.slot_ids[TIMER_SLOT_INDEX]
+                        if not 0 <= timer_slot < len(TIMER_ACTIONS):
+                            raise RuntimeError(
+                                f"invalid TIMER slot prediction: {timer_slot}"
+                            )
+                        result = dispatcher.execute(
+                            dispatch_label,
+                            slot_action=TIMER_ACTIONS[timer_slot],
                         )
                     else:
                         result = dispatcher.execute(dispatch_label)

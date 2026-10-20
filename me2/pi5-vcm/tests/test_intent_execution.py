@@ -13,6 +13,18 @@ import pytest
 from inference.pi5_runner import intent_execution as execution
 
 
+class FakeCountdownTimer:
+    def __init__(self) -> None:
+        self.durations: list[int] = []
+        self.closed = False
+
+    def start(self, seconds: int) -> None:
+        self.durations.append(seconds)
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def test_dispatcher_covers_all_model_intents(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -62,8 +74,10 @@ def test_dispatcher_covers_all_model_intents(
             "test light",
         ),
     )
+    timer = FakeCountdownTimer()
     dispatcher = execution.IntentDispatcher(
-        reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json")
+        reminder_store=execution.JsonReminderStore(tmp_path / "reminders.json"),
+        countdown_timer=timer,
     )
 
     assert len(execution.INTENT_NAMES) == 20
@@ -81,7 +95,6 @@ def test_dispatcher_covers_all_model_intents(
             "WEATHER",
             "CALL",
             "MESSAGE",
-            "TIMER",
             "ALARM",
             "TEMPERATURE",
             "BRIGHTNESS",
@@ -90,6 +103,40 @@ def test_dispatcher_covers_all_model_intents(
             assert result.status is execution.ExecutionStatus.UNAVAILABLE
         else:
             assert result.status is execution.ExecutionStatus.COMPLETED
+    dispatcher.close()
+    assert timer.durations == [10]
+    assert timer.closed
+
+
+@pytest.mark.parametrize(
+    ("action", "seconds"),
+    [
+        ("10 seconds", 10),
+        ("30 seconds", 30),
+        ("1 minute", 60),
+    ],
+)
+def test_timer_starts_with_selected_duration(
+    action: str,
+    seconds: int,
+) -> None:
+    timer = FakeCountdownTimer()
+    dispatcher = execution.IntentDispatcher(countdown_timer=timer)
+
+    result = dispatcher.execute("TIMER", slot_action=action)
+
+    assert result.status is execution.ExecutionStatus.COMPLETED
+    assert result.message == f"Timer set for {action}."
+    assert timer.durations == [seconds]
+    dispatcher.close()
+
+
+def test_timer_rejects_unsupported_duration() -> None:
+    dispatcher = execution.IntentDispatcher(countdown_timer=FakeCountdownTimer())
+
+    with pytest.raises(ValueError, match="unsupported timer duration"):
+        dispatcher.execute("TIMER", slot_action="2 hours")
+
     dispatcher.close()
 
 

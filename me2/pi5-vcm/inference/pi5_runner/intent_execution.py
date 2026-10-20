@@ -9,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -20,8 +21,10 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 if __package__:
+    from .countdown_timer import CountdownTimer, TimerScheduler
     from .reminder_store import JsonReminderStore, ReminderStoreError
 else:
+    from countdown_timer import CountdownTimer, TimerScheduler
     from reminder_store import JsonReminderStore, ReminderStoreError
 
 INTENT_NAMES = (
@@ -64,6 +67,10 @@ PLAYER_STOP_TIMEOUT_SECONDS = 3
 CREATE_REMINDER_ACTIONS = ("Drink water", "Study", "Exercise")
 CREATE_REMINDER_SLOT_INDEX = 5
 REMINDER_LIST_LIMIT = 5
+TIMER_ACTIONS = ("10 seconds", "30 seconds", "1 minute")
+TIMER_DURATIONS_SECONDS = (10, 30, 60)
+TIMER_SLOT_INDEX = 0
+TIMER_EXPIRED_MESSAGE = "Your timer is up."
 
 
 class WeatherServiceError(RuntimeError):
@@ -369,13 +376,24 @@ class IntentDispatcher:
     before dispatching an intent.
     """
 
-    def __init__(self, reminder_store: JsonReminderStore | None = None) -> None:
+    def __init__(
+        self,
+        reminder_store: JsonReminderStore | None = None,
+        *,
+        timer_expiry_callback: Callable[[], None] | None = None,
+        countdown_timer: TimerScheduler | None = None,
+    ) -> None:
         self._gpio_light: GpioLight | None = None
         self._weather_client = OpenWeatherClient()
         self._music_player = LocalMusicPlayer()
         self._output_volume = OutputVolume()
         self._reminder_store = (
             reminder_store if reminder_store is not None else JsonReminderStore()
+        )
+        self._countdown_timer = (
+            countdown_timer
+            if countdown_timer is not None
+            else CountdownTimer(timer_expiry_callback or self._log_timer_expiry)
         )
         self._handlers = {
             "PLAY_MUSIC": self._music_player.play,
@@ -395,9 +413,7 @@ class IntentDispatcher:
                 "MESSAGE", "a messaging provider is not configured"
             ),
             "LIST_REMINDERS": self._list_reminders,
-            "TIMER": lambda: self._unavailable(
-                "TIMER", "a timer service is not configured"
-            ),
+            "TIMER": lambda: self._set_timer(None),
             "ALARM": lambda: self._unavailable(
                 "ALARM", "an alarm service is not configured"
             ),
@@ -441,6 +457,8 @@ class IntentDispatcher:
             raise ValueError(f"unknown intent label: {intent_name!r}")
         if intent_name == "CREATE_REMINDER":
             result = self._create_reminder(slot_action)
+        elif intent_name == "TIMER":
+            result = self._set_timer(slot_action)
         else:
             result = handler()
         logger.info(
@@ -452,6 +470,7 @@ class IntentDispatcher:
         return result
 
     def close(self) -> None:
+        self._countdown_timer.close()
         self._music_player.close()
         if self._gpio_light is not None:
             self._gpio_light.close()
@@ -492,6 +511,22 @@ class IntentDispatcher:
             status=ExecutionStatus.COMPLETED,
             message=f"Reminder added: {reminder.action}.",
         )
+
+    def _set_timer(self, slot_action: str | None) -> ExecutionResult:
+        action = TIMER_ACTIONS[0] if slot_action is None else slot_action
+        if action not in TIMER_ACTIONS:
+            raise ValueError(f"unsupported timer duration: {action!r}")
+        duration_seconds = TIMER_DURATIONS_SECONDS[TIMER_ACTIONS.index(action)]
+        self._countdown_timer.start(duration_seconds)
+        return ExecutionResult(
+            intent="TIMER",
+            status=ExecutionStatus.COMPLETED,
+            message=f"Timer set for {action}.",
+        )
+
+    @staticmethod
+    def _log_timer_expiry() -> None:
+        logger.warning("timer expired but no speech callback is configured")
 
     def _list_reminders(self) -> ExecutionResult:
         try:
