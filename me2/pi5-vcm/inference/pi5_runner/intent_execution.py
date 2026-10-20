@@ -412,7 +412,8 @@ class IntentDispatcher:
             ),
             "CREATE_REMINDER": lambda: self._create_reminder(None),
             "OUT_OF_SCOPE": lambda: self._rejected(
-                "OUT_OF_SCOPE", "out-of-scope predictions are not executed"
+                "OUT_OF_SCOPE",
+                "Sorry, I didn't understand that. Please try again.",
             ),
         }
 

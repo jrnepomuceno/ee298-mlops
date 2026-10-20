@@ -80,7 +80,8 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   paired training statistics.
 - Added local action dispatch for time, local music controls, optional GPIO
   light control, and weather. Unsupported integrations report `unavailable`;
-  out-of-scope predictions are rejected.
+  out-of-scope predictions are rejected with the spoken response
+  "Sorry, I didn't understand that. Please try again."
 - Implemented current WEATHER responses for Quezon City, Philippines, using
   OpenWeather Current Weather API and `OPENWEATHER_API_KEY`. The provider
   requests metric conditions by city name and avoids logging the API key or
@@ -140,7 +141,10 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
 - Earlier focused wake-runner and intent-execution tests: 57 passed. After the
   reminder changes, the focused reminder-store, intent-execution, and
   wake-runner suite passed: 71 tests. Python compilation and
-  `git diff --check` passed for the reminder changes.
+  `git diff --check` passed for the reminder changes. After adding the
+  user-facing out-of-scope response, the focused intent-execution and
+  wake-runner suite passed: 62 tests; Python compilation and
+  `git diff --check` passed.
 
 ### Not yet verified or completed
 
@@ -149,7 +153,8 @@ manifests remain local under the ignored `pi5-vcm/data/processed/` directory.
   `mel_stats.npz` are still required before real ME2 predictions can be run.
 - The dispatcher currently returns `unavailable` for `CALL`, `MESSAGE`,
   `TIMER`, `ALARM`, `TEMPERATURE`, `BRIGHTNESS`, and `COLOR`; their service or
-  hardware adapters are not configured. `OUT_OF_SCOPE` is rejected by design.
+  hardware adapters are not configured. `OUT_OF_SCOPE` remains rejected and
+  now speaks a friendly retry prompt.
 - Reminder behavior has only been verified with pytest. It still needs
   on-device validation when the Pi is available.
 - `LIGHT_ON`/`LIGHT_OFF` require a configured GPIO pin; their real-device

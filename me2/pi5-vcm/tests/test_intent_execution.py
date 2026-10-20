@@ -73,6 +73,10 @@ def test_dispatcher_covers_all_model_intents(
         assert result.intent == intent_name
         if intent_name == "OUT_OF_SCOPE":
             assert result.status is execution.ExecutionStatus.REJECTED
+            assert (
+                result.message
+                == "Sorry, I didn't understand that. Please try again."
+            )
         elif intent_name in {
             "WEATHER",
             "CALL",
