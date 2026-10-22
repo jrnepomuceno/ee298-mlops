@@ -1087,9 +1087,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                         COMMAND_START_TIMEOUT_SECONDS,
                     )
                 else:
+                    inference_started = time.perf_counter()
                     prediction = predictor.predict(
                         command, threshold=intent_threshold
                     )
+                    inference_ms = (time.perf_counter() - inference_started) * 1_000
                     logger.info(
                         "intent prediction: label=%s confidence=%.4f "
                         "out_of_scope_confidence=%.4f accepted=%s",
@@ -1104,34 +1106,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                         else "OUT_OF_SCOPE"
                     )
                     execution_started = time.perf_counter()
+                    slot_action: str | None = None
                     if dispatch_label == "CREATE_REMINDER":
-                        reminder_action = CREATE_REMINDER_ACTIONS[
+                        slot_action = CREATE_REMINDER_ACTIONS[
                             prediction.slot_ids[CREATE_REMINDER_SLOT_INDEX]
                         ]
-                        result = dispatcher.execute(
-                            dispatch_label,
-                            slot_action=reminder_action,
-                        )
                     elif dispatch_label == "TIMER":
                         timer_slot = prediction.slot_ids[TIMER_SLOT_INDEX]
                         if not 0 <= timer_slot < len(TIMER_ACTIONS):
                             raise RuntimeError(
                                 f"invalid TIMER slot prediction: {timer_slot}"
                             )
-                        result = dispatcher.execute(
-                            dispatch_label,
-                            slot_action=TIMER_ACTIONS[timer_slot],
-                        )
+                        slot_action = TIMER_ACTIONS[timer_slot]
                     elif dispatch_label == "ALARM":
                         alarm_slot = prediction.slot_ids[ALARM_SLOT_INDEX]
                         if not 0 <= alarm_slot < len(ALARM_ACTIONS):
                             raise RuntimeError(
                                 f"invalid ALARM slot prediction: {alarm_slot}"
                             )
-                        result = dispatcher.execute(
-                            dispatch_label,
-                            slot_action=ALARM_ACTIONS[alarm_slot],
-                        )
+                        slot_action = ALARM_ACTIONS[alarm_slot]
                     elif dispatch_label == "TEMPERATURE":
                         temperature_slot = prediction.slot_ids[
                             TEMPERATURE_SLOT_INDEX
@@ -1141,20 +1134,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 "invalid TEMPERATURE slot prediction: "
                                 f"{temperature_slot}"
                             )
-                        result = dispatcher.execute(
-                            dispatch_label,
-                            slot_action=TEMPERATURE_ACTIONS[temperature_slot],
-                        )
+                        slot_action = TEMPERATURE_ACTIONS[temperature_slot]
                     elif dispatch_label == "COLOR":
                         color_slot = prediction.slot_ids[COLOR_SLOT_INDEX]
                         if not 0 <= color_slot < len(COLOR_NAMES):
                             raise RuntimeError(
                                 f"invalid COLOR slot prediction: {color_slot}"
                             )
-                        result = dispatcher.execute(
-                            dispatch_label,
-                            slot_action=COLOR_NAMES[color_slot],
-                        )
+                        slot_action = COLOR_NAMES[color_slot]
                     elif dispatch_label == "BRIGHTNESS":
                         brightness_slot = prediction.slot_ids[
                             BRIGHTNESS_SLOT_INDEX
@@ -1164,12 +1151,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 "invalid BRIGHTNESS slot prediction: "
                                 f"{brightness_slot}"
                             )
+                        slot_action = BRIGHTNESS_ACTIONS[brightness_slot]
+
+                    slot_field = (
+                        f" slot={slot_action}" if slot_action is not None else ""
+                    )
+                    logger.info(
+                        "benchmark event: intent=%s%s infer_ms=%.1f audio_ms=%.1f",
+                        dispatch_label,
+                        slot_field,
+                        inference_ms,
+                        command.size * 1_000 / SAMPLE_RATE,
+                    )
+                    if slot_action is None:
+                        result = dispatcher.execute(dispatch_label)
+                    else:
                         result = dispatcher.execute(
                             dispatch_label,
-                            slot_action=BRIGHTNESS_ACTIONS[brightness_slot],
+                            slot_action=slot_action,
                         )
-                    else:
-                        result = dispatcher.execute(dispatch_label)
                     logger.info(
                         "intent execution completed: intent=%s duration_ms=%.1f",
                         dispatch_label,

@@ -279,6 +279,12 @@ For command-path latency diagnostics, the runner logs command-capture,
 intent-execution, speech-synthesis, speech-playback, and total wake-to-reply
 durations for each interaction. The total starts after wake acknowledgement
 and includes waiting for the command, the command itself, and reply playback.
+Each real inference also emits a benchmark-compatible key/value record, for
+example `benchmark event: intent=TIMER slot=30 seconds infer_ms=42.1
+audio_ms=1280.0`. `infer_ms` covers the prediction call and `audio_ms` is the
+duration of the recorded command audio. Fixed intents and out-of-scope
+predictions omit `slot`; existing human-readable prediction and execution logs
+remain unchanged.
 
 Setup does not install or select the ME2 model, mel statistics, or threshold.
 Keep those artifacts paired with the checkpoint/export report that produced

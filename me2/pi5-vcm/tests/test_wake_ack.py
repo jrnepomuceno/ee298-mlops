@@ -1085,9 +1085,11 @@ def test_record_command_returns_none_when_no_speech_starts() -> None:
 def test_main_infers_and_dispatches_only_accepted_intents(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
     accepted: bool,
     intent_label: str,
 ) -> None:
+    caplog.set_level("INFO")
     events: list[str] = []
 
     class Capture:
@@ -1234,6 +1236,20 @@ def test_main_infers_and_dispatches_only_accepted_intents(
     elif accepted and intent_label == "COLOR":
         expected_slot_action = "Blue"
     assert f"dispatch:{expected_dispatch}:{expected_slot_action}" in events
+    benchmark_events = [
+        record.getMessage()
+        for record in caplog.records
+        if "benchmark event:" in record.getMessage()
+    ]
+    assert len(benchmark_events) == 1
+    benchmark_event = benchmark_events[0]
+    assert f"benchmark event: intent={expected_dispatch}" in benchmark_event
+    assert "infer_ms=" in benchmark_event
+    assert "audio_ms=0.6" in benchmark_event
+    if expected_slot_action == "None":
+        assert " slot=" not in benchmark_event
+    else:
+        assert f" slot={expected_slot_action} " in benchmark_event
     assert events.index("acknowledge") < events.index("record-command")
     assert events.index("record-command") < events.index("predict")
     assert "predict" in events
